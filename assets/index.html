@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Document</title>
+		<meta name="color-scheme" content="light dark" />
+		<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+		<!-- <link rel="stylesheet" href="assets/styles.css" /> -->
+	</head>
+
+	<style>
+		.searching {
+			cursor: progress;
+			opacity: 40%;
+		}
+
+		:root {
+			--nav-height: 100px;
+		}
+
+		.tableWrapper input[type="text"] {
+			padding: 0px !important;
+			min-width: 120px;
+
+			margin: 5px 0px;
+			height: fit-content;
+			z-index: -5 !important;
+		}
+
+		.small,
+		.small input {
+			min-width: 75px !important;
+			width: 75px !important;
+			text-align: center;
+		}
+
+		#titles {
+			position: sticky;
+			top: 0px;
+			th {
+				min-width: 200px;
+				width: 200px;
+				text-align: center;
+				padding: 0px !important;
+				z-index: 10 !important;
+			}
+		}
+
+		#nav {
+			display: flex !important;
+			flex-direction: row;
+			position: sticky;
+			width: 100%;
+			left: 0;
+			top: 0;
+			z-index: 5;
+			height: var(--nav-height);
+			background-color: black;
+			align-items: center;
+
+			button {
+				margin-right: 5px;
+			}
+
+			#search {
+				align-items: center;
+				margin: 0px 10px;
+				input {
+					width: 200px;
+					margin: 0px !important;
+				}
+			}
+
+			select {
+				width: 200px;
+				margin: 0px 10px;
+			}
+		}
+
+		tr,
+		td {
+			height: 20px !important;
+			padding: 0px 10px;
+		}
+
+		.tableWrapper {
+			overflow: scroll;
+			height: calc(100vh - var(--nav-height));
+		}
+
+		.inputForCat {
+			tr, td, input {
+				height: 30px !important;
+			}
+			input {
+				width: 200px;
+				margin: 0px !important;
+				padding: 0px !important;
+			}
+		}
+	</style>
+
+	<body>
+		<dialog closed id="modal">
+			<article>
+				<header>
+					<button aria-label="Close" rel="prev" onclick="closeModal('clear')"></button>
+					<p>
+						<strong>Szűrés</strong>
+					</p>
+				</header>
+				<table>
+					<thead></thead>
+					<tbody id="listWrapper"></tbody>
+				</table>
+				<footer>
+					<button onclick="closeModal()">Mentés</button>
+				</footer>
+			</article>
+		</dialog>
+
+		<div id="nav">
+			<button onclick="save()" id="save" disabled>Mentés</button>
+			<select name="sections" id="sections"></select>
+			<div id="search">
+				<input type="text" placeholder="Keresés" name="search" />
+				<button class="secondary" onclick="search()">Keresés</button>
+			</div>
+			<button onclick="openModal()">Szűrés</button>
+		</div>
+
+		<div class="tableWrapper">
+			<table class="striped">
+				<thead>
+					<tr id="titles" style="z-index: 2;">
+						<th scope="col" class="small">sor</th>
+					</tr>
+				</thead>
+				<tbody id="dataWrapper"></tbody>
+			</table>
+		</div>
+
+		<script>
+			const keysString = `{{.keys}}`;
+			const keys = keysString.split("; ");
+
+			const searchParamsString = `{{.searchParams}}`;
+			const searchParams = searchParamsString.split("; ");
+
+			const sectionssting = `{{.sections}}`;
+			const sections = sectionssting.split("; ");
+
+
+			const titleWrapper = document.getElementById("titles");
+			const dataWrapper = document.getElementById("dataWrapper");
+
+
+			keys.forEach((key) => {
+				const el = document.createElement("th");
+				el.innerHTML = key;
+				el.scope = "col";
+				el.className = isSmall(key);
+				titleWrapper.appendChild(el);
+			});
+
+
+			const listWrapper = document.getElementById("listWrapper");
+			for (let i = 0; i < searchParams.length; i++) {
+				const el = document.createElement("tr");
+				el.className = "inputForCat";
+				el.innerHTML = `
+				<td>${searchParams[i]}</td>
+				<td><input class="filterClass" type="text" name="${searchParams[i]}"></input></td>
+				`;
+				listWrapper.appendChild(el);
+			}
+
+			const sectionsWrapper = document.getElementById("sections");
+			for (let i = 0; i < sections.length; i++) {
+				const el = document.createElement("option");
+				el.value = sections[i];
+				el.innerHTML = sections[i];
+				sectionsWrapper.appendChild(el);
+			}
+
+			const searchBox = document.getElementById("search").children[0];
+			searchBox.addEventListener("keydown", (keyPress) => {
+				if (keyPress.key == "Enter") {
+					search();
+				}
+			});
+
+			////////////////////////////////////////////
+
+			function isSmall(name) {
+				const smallRows = ["betű", "látva"];
+				if (smallRows.includes(name)) {
+					return "small";
+				}
+				return "";
+			}
+
+			function openModal() {
+				const modal = document.getElementById("modal");
+				modal.showModal();
+			}
+
+			function closeModal(options) {
+				if (options == "clear") {
+					document.querySelectorAll(".filterClass").forEach((el) => {
+						el.value = "";
+					})
+				}
+				const modal = document.getElementById("modal");
+				modal.close();
+			}
+
+			function draw(dat) {
+				dataWrapper.innerHTML = "";
+				for (const [rowidx, rowdata] of Object.entries(dat)) {
+					const el = document.createElement("tr");
+					el.id = rowidx;
+
+					const rowText = document.createElement("td");
+					rowText.style = "position: sticky; left: 0; background-color: black; z-index: 1";
+					rowText.className = "small";
+					rowText.innerHTML = `<input type="text" value="${rowidx}" name="${rowidx}" disabled>`;
+					el.appendChild(rowText);
+
+					for (let i = 0; i < keys.length; i++) {
+						const td = document.createElement("td");
+						const v = rowdata[keys[i]] == undefined ? "" : rowdata[keys[i]];
+						td.className = isSmall(keys[i]);
+						td.innerHTML = `<input type="text" value="${v}" name="${keys[i]}">`;
+						el.appendChild(td);
+					}
+
+					dataWrapper.appendChild(el);
+				}
+				document.querySelector("html").className = "";
+			}
+
+			// have to sort it also, TODO later
+			// apparently html or js has sorting built into it
+
+			function search() {
+				document.querySelector("html").className = "searching";
+				const val = searchBox.value;
+				const filters = document.querySelectorAll(".filterClass");
+				let filterJSON = {};
+
+				for(let i = 0; i < filters.length; i++) {
+					filterJSON[filters[i].name] = filters[i].value
+				}
+				console.log(filterJSON);
+
+				fetch("http://localhost:8080/search/", {
+					method: "POST",
+					body: JSON.stringify({
+						search: val,
+						section: sectionsWrapper.value,
+						filters: JSON.stringify(filterJSON),
+					}),
+					headers: {
+						"Content-type": "application/json; charset=UTF-8",
+					},
+				})
+					.then((response) => response.json())
+					.then((json) => draw(json));
+				}
+
+			function save() {
+				let elements = document.querySelectorAll("input[type=text]");
+				let senddata = [];
+				for (let i = 0; i < elements.length; i++) {
+					senddata.push(elements[i].value);
+				}
+
+				fetch("http://localhost:8080/update/", {
+					method: "POST",
+					body: JSON.stringify({
+						senddata,
+					}),
+					headers: {
+						"Content-type": "application/json; charset=UTF-8",
+					},
+				})
+					.then((response) => response.json())
+					.then((json) => console.log(json()));
+			}
+		</script>
+	</body>
+</html>
