@@ -2,74 +2,63 @@ package main
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
-
-	"github.com/xuri/excelize/v2"
 )
 
-func getKeys(Mainrows row) []string {
-	var keys []string
-	main:
-	for rowidx, row := range Mainrows {
-		for _, colCell := range row {
-			if rowidx == 0 {
-				if colCell == "határ" {
-					break main
-				}
-				keys = append(keys, colCell)
-			} else {
-				break main
-			}
-		}
-	}
-	return keys
-}
-
-func convertListToString(inpt []string) string {
-	var idxString string
-
-	for elidx, el := range inpt {
-		if elidx == len(inpt) - 1 {
-			idxString += el
-			break
-		}
-		idxString += fmt.Sprintf("%s; ", el)
-	}
-	return idxString
-}
-
-func getSection(file *excelize.File, section string, keys []string) mainDataType {
+func getSection(sectionData [][]string, keys []string, search string, filters map[string]string) mainDataType {
 
 	output := make(mainDataType)
 
-	rows, err := file.GetRows(section)
-	if err != nil {
-		fmt.Println(err)
-		panic(err)
-	}
-
-	for rowidx, row := range rows {
-		if rowidx == 0 {continue}
-		// if rowidx > 20 {break}
-		isEmpty := true
-		placeholder := make(map[string]string) 
-		for colidx, colCell := range row {
-			if colidx >= len(keys) {break}
-			placeholder[keys[colidx]] = colCell
-			
-			if colCell != "" {isEmpty = false}
+	for rowidx, row := range sectionData {
+		if rowidx == 0 {
+			continue
 		}
-		if isEmpty {continue}
-		output[strconv.Itoa(rowidx - 1)] = placeholder  
-	}	
+		colCount := 0
+		rowData := make(map[string]string)
+		isEmpty := true
+		for colidx, colCell := range row {
 
+			if colCell != "" && colCell != "x" {
+				isEmpty = false
+			}
+
+			idx := colidx % (len(keys) + 3)
+
+			if idx == len(keys) {
+				if isEmpty {
+					continue
+				}
+				if isFilterInData(filters, rowData, search) {
+					output[fmt.Sprintf("%v, %v", colCount+1, rowidx+2)] = rowData
+				}
+				colCount++
+				rowData = make(map[string]string)
+				isEmpty = true
+				continue
+			}
+
+			if idx >= len(keys) {
+				idx = 0
+			}
+
+			rowData[keys[idx]] = colCell
+
+		}
+	}
 	return output
 }
 
-func isFilterInData(filter map[string]string, data map[string]string) bool {
-	for key := range filter {
-		if !(strings.Contains(strings.ToLower(data[key]), strings.ToLower(filter[key]))) {return false}
+func isFilterInData(filter map[string]string, data map[string]string, search string) bool {
+	val := false
+	for _, value := range data {
+		if strings.Contains(strings.ToLower(value), strings.ToLower(search)) {
+			val = true
+			for Filterkey := range filter {
+				if !(strings.Contains(strings.ToLower(data[Filterkey]), strings.ToLower(filter[Filterkey]))) {
+					val = false
+				}
+			}
+		}
 	}
-	return true
+	return val
 }

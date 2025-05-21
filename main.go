@@ -8,7 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
+	"sync"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -16,36 +16,71 @@ import (
 // [rowcount -> [elementkey -> itemvalue]]
 type mainDataType map[string]map[string]string
 
-type row [][]string
-
 func main() {
-	file, err := excelize.OpenFile("mainmain.xlsx")
+	fmt.Println("Betöltés...")
+
+	fs := http.FileServer(http.Dir("assets"))
+	http.Handle("/assets/", http.StripPrefix("/assets", fs))
+	file, err := excelize.OpenFile("assets/mainmain.xlsx")
 	if err != nil {
 		fmt.Printf("%v Press enter to exit.", err)
 		fmt.Scanln()
 		os.Exit(1)
 	}
-		
-	rows, err := file.GetRows("VKK")
-	if err != nil {
-		fmt.Println(err)
-		return
+
+	searchParams := []string{"betű", "látva", "országrész", "vármegye1914", "járás1914", "helység", "VKK"}
+	sections := []string{"VKK", "templom", "látnivalók", "VKKBudapest", "MOn kívüli magyar", "elbontott"}
+
+	//sectionName -> sectionData
+	SECTIONMAP := make(map[string][][]string)
+
+	//sectionName -> sectionKeyset
+	KEYMAP := make(map[string][]string)
+	
+	var wg sync.WaitGroup
+
+	for _, Section := range sections {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rows, err := file.GetRows(Section)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			SECTIONMAP[Section] = rows
+
+			for i, row := range rows {	
+				if i > 0 {break}
+				
+				for _, el := range row {
+					if el == "határ" {break}
+					KEYMAP[Section] = append(KEYMAP[Section], el)
+				}
+			}
+		}()
 	}
 	
-	keys := getKeys(rows)
-	
-	searchParams := []string{"országrész", "vármegye1914", "járás1914", "helység", "VKK"} 
-	sections := []string{"VKK", "templom", "látnivalók", "VKKBudapest", "MOn kívüli magyar", "elbontott"}
-		
+	wg.Wait()	
+
+	fmt.Println("Kész!")
+
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		
 		tmpl := template.Must(template.ParseFiles("assets/index.html"))
-		tmpl.Execute(w, map[string]string{
-			"keys": convertListToString(keys), 
-			"searchParams": convertListToString(searchParams),
-			"sections": convertListToString(sections),
-		})
+		tmpl.Execute(w, "")
 	})
-	
+
+	http.HandleFunc("/base/", func(w http.ResponseWriter, r *http.Request) {
+		sendData, err := json.Marshal([][]string{searchParams, sections})
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		w.Write(sendData)
+	})
+
 	http.HandleFunc("/save/", func(w http.ResponseWriter, r *http.Request) {
 		//last task
 
@@ -59,14 +94,14 @@ func main() {
 			fmt.Println(err)
 			return
 		}
-		
+
 		var INPUT map[string]string
 		err = json.Unmarshal(inputBit, &INPUT)
 		if err != nil {
 			fmt.Println(err)
 			return
-		}		
-		
+		}
+
 		var filters map[string]string
 		err = json.Unmarshal([]byte(INPUT["filters"]), &filters)
 		if err != nil {
@@ -74,26 +109,14 @@ func main() {
 			return
 		}
 
-		final := make(mainDataType)
-
-		output := getSection(file, INPUT["section"], keys)
-		
-		for row, DATA := range output {
-			for _, value := range DATA {
-				if strings.Contains(strings.ToLower(value), strings.ToLower((INPUT["search"]))) {	
-					if isFilterInData(filters, DATA) {
-						final[row] = DATA
-					}
-					break
-				}
-			}
+		type sendType struct {
+			Keyset []string
+			Data mainDataType	
 		}
+	
 
-		index := &output
-		*index = mainDataType{}
-
-		OUTPUT, err := json.Marshal(final)
-
+		output := getSection(SECTIONMAP[INPUT["section"]], KEYMAP[INPUT["section"]], INPUT["search"], filters)
+		OUTPUT, err := json.Marshal(sendType{KEYMAP[INPUT["section"]], output})
 		if err != nil {
 			fmt.Println(err)
 			return
@@ -101,11 +124,7 @@ func main() {
 
 		w.Write(OUTPUT)
 	})
-	
-	log.Println("A szerver elindult: http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", nil)) 	
+
+	fmt.Println("A szerver elindult: http://localhost:8080")
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
-
-
-
-
