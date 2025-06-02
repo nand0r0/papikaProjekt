@@ -12,6 +12,8 @@ let MaxPages = 0;
 let PageData = [];
 let CurrentPage = 0;
 let Keys = [];
+let LoadedRows = [];
+let SavedRows = [];
 fetch("http://localhost:8080/base/")
     .then((resp) => resp.json())
     .then((json) => main(json));
@@ -64,6 +66,7 @@ function makeRowElement(rowidx, rowdata, keys) {
     const row = document.createElement("tr");
     row.id = rowidx;
     const mapRowidx = new Map(Object.entries(rowdata));
+    let elelment = new Row(mapRowidx);
     const defineRowIdx = document.createElement("td");
     defineRowIdx.className = "small rowIdx";
     defineRowIdx.innerHTML = `<input type="text" value="${rowidx}" name="${rowidx}" disabled>`;
@@ -146,10 +149,10 @@ function getSortedElementsList(elements) {
         const idx = key.split(", ");
         columns.push(parseInt(idx[0]));
     }
-    for (let i = 0; i < max(columns); i++) {
+    for (let i = 0; i < Math.max(...columns); i++) {
         idxArray.push([]);
     }
-    for (const [key, value] of elements.entries()) {
+    for (const [key, _] of elements.entries()) {
         const idx = key.split(", ");
         idxArray[parseInt(idx[0]) - 1].push(parseInt(idx[1]));
     }
@@ -165,12 +168,6 @@ function getSortedElementsList(elements) {
         }
     }
     return returnArray;
-}
-function switchPage(page) {
-    drawDataInTable(PageData[page], Keys);
-    prevPage(true);
-    nextPage(true);
-    PageCounter.innerHTML = `${page + 1}/${MaxPages}`;
 }
 function makePages(data) {
     let returnData = [];
@@ -189,37 +186,4 @@ function makePages(data) {
         }
     }
     return returnData;
-}
-function prevPage(reset) {
-    const el = document.getElementById("prevPage");
-    if (reset) {
-        if (CurrentPage == 0) {
-            el.setAttribute("disabled", "");
-        }
-        else {
-            el.removeAttribute("disabled");
-        }
-        return;
-    }
-    if (CurrentPage != 0) {
-        CurrentPage--;
-        switchPage(CurrentPage);
-    }
-}
-function nextPage(reset) {
-    const el = document.getElementById("nextPage");
-    if (reset) {
-        if (CurrentPage == MaxPages - 1) {
-            el.setAttribute("disabled", "");
-        }
-        else {
-            el.removeAttribute("disabled");
-        }
-    }
-    else {
-        if (CurrentPage != MaxPages - 1) {
-            CurrentPage++;
-            switchPage(CurrentPage);
-        }
-    }
 }

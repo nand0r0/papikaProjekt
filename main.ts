@@ -1,5 +1,7 @@
 //main Typescript file
 type filterType = Map<string, string>;
+
+//["col, row"][key, value]
 type rowDataType = Map<string, Map<string, string>>;
 
 const TitleWrapper = document.getElementById("titles") as HTMLElement;
@@ -17,6 +19,8 @@ let PageData: rowDataType[][] = [];
 let CurrentPage = 0;
 
 let Keys: string[] = [];
+let LoadedRows: Row[] = [];
+let SavedRows: Row[] = [];
 
 fetch("http://localhost:8080/base/")
 	.then((resp) => resp.json())
@@ -87,6 +91,8 @@ function makeRowElement(rowidx: string, rowdata: Map<string, string>, keys: stri
 
 	//i have to do this since for some reason js just decides to convert a map to an object
 	const mapRowidx = new Map(Object.entries(rowdata));
+
+	let elelment = new Row(mapRowidx);
 
 	const defineRowIdx = document.createElement("td");
 	defineRowIdx.className = "small rowIdx";
@@ -178,11 +184,12 @@ function getSortedElementsList(elements: rowDataType): string[] {
 	let returnArray: string[] = [];
 	let idxArray: number[][] = [];
 	let columns: number[] = [];
+
 	for (const [key, _] of elements.entries()) {
 		const idx = key.split(", ");
 		columns.push(parseInt(idx[0]));
 	}
-	for (let i = 0; i < max(columns); i++) {
+	for (let i = 0; i < Math.max(...columns); i++) {
 		idxArray.push([]);
 	}
 
@@ -206,13 +213,6 @@ function getSortedElementsList(elements: rowDataType): string[] {
 	return returnArray;
 }
 
-function switchPage(page: number) {
-	drawDataInTable(PageData[page], Keys);
-	prevPage(true);
-	nextPage(true);
-	PageCounter.innerHTML = `${page + 1}/${MaxPages}`;
-}
-
 function makePages(data: rowDataType): rowDataType[][] {
 	let returnData: rowDataType[][] = [];
 	const sortedElementList = getSortedElementsList(data);
@@ -230,39 +230,4 @@ function makePages(data: rowDataType): rowDataType[][] {
 		}
 	}
 	return returnData;
-}
-
-function prevPage(reset?: boolean) {
-	const el = document.getElementById("prevPage") as HTMLButtonElement;
-
-	if (reset) {
-		if (CurrentPage == 0) {
-			el.setAttribute("disabled", "");
-		} else {
-			el.removeAttribute("disabled");
-		}
-		return;
-	}
-
-	if (CurrentPage != 0) {
-		CurrentPage--;
-		switchPage(CurrentPage);
-	}
-}
-
-function nextPage(reset?: boolean) {
-	const el = document.getElementById("nextPage") as HTMLButtonElement;
-
-	if (reset) {
-		if (CurrentPage == MaxPages - 1) {
-			el.setAttribute("disabled", "");
-		} else {
-			el.removeAttribute("disabled");
-		}
-	} else {
-		if (CurrentPage != MaxPages - 1) {
-			CurrentPage++;
-			switchPage(CurrentPage);
-		}
-	}
 }

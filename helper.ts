@@ -8,15 +8,52 @@ function closeModal() {
 	modal.close();
 }
 
-function max(numberArray: number[]): number {
-	if (numberArray.length == 0) {
-		return -1;
-	}
-	let maxNum = numberArray[0];
-	numberArray.forEach((num) => {
-		if (num > maxNum) {
-			maxNum = num;
+function prevPage(reset?: boolean) {
+	const el = document.getElementById("prevPage") as HTMLButtonElement;
+
+	if (reset) {
+		if (CurrentPage == 0) {
+			el.setAttribute("disabled", "");
+		} else {
+			el.removeAttribute("disabled");
 		}
-	});
-	return maxNum;
+		return;
+	}
+
+	if (CurrentPage != 0) {
+		CurrentPage--;
+		switchPage(CurrentPage);
+	}
+}
+
+function nextPage(reset?: boolean) {
+	const el = document.getElementById("nextPage") as HTMLButtonElement;
+
+	if (reset) {
+		if (CurrentPage == MaxPages - 1) {
+			el.setAttribute("disabled", "");
+		} else {
+			el.removeAttribute("disabled");
+		}
+	} else {
+		if (CurrentPage != MaxPages - 1) {
+			CurrentPage++;
+			switchPage(CurrentPage);
+		}
+	}
+}
+
+function switchPage(page: number) {
+	drawDataInTable(PageData[page], Keys);
+	prevPage(true);
+	nextPage(true);
+	PageCounter.innerHTML = `${page + 1}/${MaxPages}`;
+}
+
+class Row {
+	rowData: Map<string, string>;
+
+	constructor(DATA: Map<string, string>) {
+		this.rowData = DATA;
+	}
 }

@@ -114,7 +114,6 @@ func main() {
 			Data mainDataType	
 		}
 	
-
 		output := getSection(SECTIONMAP[INPUT["section"]], KEYMAP[INPUT["section"]], INPUT["search"], filters)
 		OUTPUT, err := json.Marshal(sendType{KEYMAP[INPUT["section"]], output})
 		if err != nil {
