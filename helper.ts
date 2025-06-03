@@ -43,17 +43,35 @@ function nextPage(reset?: boolean) {
 	}
 }
 
-function switchPage(page: number) {
-	drawDataInTable(PageData[page], Keys);
-	prevPage(true);
-	nextPage(true);
-	PageCounter.innerHTML = `${page + 1}/${MaxPages}`;
-}
-
 class Row {
+	worksheet: number;
+	rowPosition: string;
 	rowData: Map<string, string>;
 
-	constructor(DATA: Map<string, string>) {
-		this.rowData = DATA;
+	constructor(DATA: Map<string, string>, ROWPOSITION: string, WORKSHEET?: number) {
+		this.rowData = new Map(Object.entries(DATA));
+		this.rowPosition = ROWPOSITION;
+		this.worksheet = WORKSHEET ? WORKSHEET : -1;
+	}
+
+	getHTMLRowElement(keyset: string[]): HTMLElement {
+		const tr = document.createElement("tr");
+		tr.id = this.rowPosition;
+
+		const defineRowIdx = document.createElement("td");
+		defineRowIdx.className = "small rowIdx";
+		defineRowIdx.innerHTML = `<input type="text" value="${this.rowPosition}" name="${this.rowPosition}" disabled>`;
+		tr.appendChild(defineRowIdx);
+
+		for (let i = 0; i < keyset.length; i++) {
+			const td = document.createElement("td");
+			const currentKey = keyset[i];
+			const v = this.rowData.get(currentKey) == undefined ? "" : this.rowData.get(currentKey);
+			td.className = isSmall(currentKey);
+			td.innerHTML = `<input type="text" value="${v}" name="${currentKey}">`;
+			tr.appendChild(td);
+		}
+
+		return tr;
 	}
 }

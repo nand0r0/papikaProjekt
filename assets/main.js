@@ -6,10 +6,9 @@ const SectionsWrapper = document.getElementById("sections");
 const SearchBox = document.getElementById("searchBox");
 const SearchButton = document.getElementById("searchButton");
 const PageCounter = document.getElementById("pageCounter");
-const sectionCheckBox = document.getElementById("sectionCheckBox");
+const SectionCheckBox = document.getElementById("sectionCheckBox");
 const MaxRowPerPage = 150;
 let MaxPages = 0;
-let PageData = [];
 let CurrentPage = 0;
 let Keys = [];
 let LoadedRows = [];
@@ -41,10 +40,15 @@ function main(json) {
 			<input type="checkbox" name="${Sections[i]}" id="${Sections[i]}">
 			<label for="${Sections[i]}">${Sections[i]}</label><br>
 		`;
-        sectionCheckBox?.appendChild(el);
+        SectionCheckBox?.appendChild(el);
     }
     function getAllSearchParams() {
-        return [SearchBox.value, SectionsWrapper.value, makeFiltersMap(DialogueFilterWrapper)];
+        let checkedSections = new Map();
+        for (let i of SectionCheckBox.children) {
+            let checkbox = i.children[0];
+            checkedSections.set(checkbox.id, checkbox.checked);
+        }
+        return [SearchBox.value, checkedSections, makeFiltersMap(DialogueFilterWrapper)];
     }
     SearchBox?.addEventListener("keydown", (keypress) => {
         if (keypress.key == "Enter") {
@@ -62,31 +66,13 @@ function isSmall(name) {
     }
     return "";
 }
-function makeRowElement(rowidx, rowdata, keys) {
-    const row = document.createElement("tr");
-    row.id = rowidx;
-    const mapRowidx = new Map(Object.entries(rowdata));
-    let elelment = new Row(mapRowidx);
-    const defineRowIdx = document.createElement("td");
-    defineRowIdx.className = "small rowIdx";
-    defineRowIdx.innerHTML = `<input type="text" value="${rowidx}" name="${rowidx}" disabled>`;
-    row.appendChild(defineRowIdx);
-    for (let i = 0; i < keys.length; i++) {
-        const td = document.createElement("td");
-        const v = mapRowidx.get(keys[i]) == undefined ? "" : mapRowidx.get(keys[i]);
-        td.className = isSmall(keys[i]);
-        td.innerHTML = `<input type="text" value="${v}" name="${keys[i]}">`;
-        row.appendChild(td);
-    }
-    return row;
-}
-async function search(searchString, searchSection, filters) {
+async function search(searchString, tickedSections, filters) {
     try {
         const resp = await fetch("http://localhost:8080/search/", {
             method: "POST",
             body: JSON.stringify({
                 search: searchString,
-                section: searchSection,
+                checkedSectons: JSON.stringify(tickedSections.entries),
                 filters: JSON.stringify(Object.fromEntries(filters)),
             }),
             headers: {
@@ -95,18 +81,24 @@ async function search(searchString, searchSection, filters) {
         });
         const responseText = await resp.text();
         const json = JSON.parse(responseText);
-        const rowData = new Map(Object.entries(json["Data"]));
+        const ImportedData = new Map(Object.entries(json["Data"]));
         Keys = json["Keyset"];
+        let el = SectionCheckBox.children[0].children[0];
+        console.log(el.checked);
         drawTitleRow();
         CurrentPage = 0;
-        PageData = makePages(rowData);
         switchPage(0);
-        return rowData;
+        return ImportedData;
     }
     catch (err) {
         console.log(err);
         return new Map();
     }
+}
+function loadRowsAsObjects(ROWDATA, WORKSHEET) {
+    ROWDATA.forEach((rowData, rowPosition) => {
+        LoadedRows[WORKSHEET].push(new Row(rowData, rowPosition));
+    });
 }
 function makeFiltersMap(Filters) {
     let idx = new Map();
@@ -137,8 +129,6 @@ function drawDataInTable(data, keys) {
         if (data[row] == undefined)
             continue;
         const rowIdx = data[row].keys().next().value;
-        const el = makeRowElement(rowIdx, data[row].get(rowIdx), keys);
-        DataWrapper.appendChild(el);
     }
 }
 function getSortedElementsList(elements) {
@@ -186,4 +176,9 @@ function makePages(data) {
         }
     }
     return returnData;
+}
+function switchPage(page) {
+    prevPage(true);
+    nextPage(true);
+    PageCounter.innerHTML = `${page + 1}/${MaxPages}`;
 }

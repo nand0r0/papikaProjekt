@@ -11,16 +11,15 @@ const SectionsWrapper = document.getElementById("sections") as HTMLSelectElement
 const SearchBox = document.getElementById("searchBox") as HTMLInputElement;
 const SearchButton = document.getElementById("searchButton") as HTMLButtonElement;
 const PageCounter = document.getElementById("pageCounter") as HTMLElement;
-const sectionCheckBox = document.getElementById("sectionCheckBox") as HTMLElement;
+const SectionCheckBox = document.getElementById("sectionCheckBox") as HTMLElement;
 
 const MaxRowPerPage = 150;
 let MaxPages = 0;
-let PageData: rowDataType[][] = [];
 let CurrentPage = 0;
 
 let Keys: string[] = [];
-let LoadedRows: Row[] = [];
-let SavedRows: Row[] = [];
+let LoadedRows: Row[][] = [];
+let SavedRows: Row[][] = [];
 
 fetch("http://localhost:8080/base/")
 	.then((resp) => resp.json())
@@ -59,11 +58,17 @@ function main(json: string[][]) {
 			<label for="${Sections[i]}">${Sections[i]}</label><br>
 		`;
 
-		sectionCheckBox?.appendChild(el);
+		SectionCheckBox?.appendChild(el);
 	}
 
-	function getAllSearchParams(): [string, string, filterType] {
-		return [SearchBox.value, SectionsWrapper.value, makeFiltersMap(DialogueFilterWrapper)];
+	function getAllSearchParams(): [string, Map<string, boolean>, filterType] {
+		let checkedSections = new Map<string, boolean>();
+
+		for (let i of SectionCheckBox.children) {
+			let checkbox = i.children[0] as HTMLInputElement;
+			checkedSections.set(checkbox.id, checkbox.checked);
+		}
+		return [SearchBox.value, checkedSections, makeFiltersMap(DialogueFilterWrapper)];
 	}
 
 	SearchBox?.addEventListener("keydown", (keypress) => {
@@ -85,38 +90,36 @@ function isSmall(name: string): string {
 	return "";
 }
 
-function makeRowElement(rowidx: string, rowdata: Map<string, string>, keys: string[]): HTMLElement {
-	const row = document.createElement("tr");
-	row.id = rowidx;
+// function makeRowElement(rowidx: string, rowdata: Map<string, string>, keys: string[]): HTMLElement {
+// 	const row = document.createElement("tr");
+// 	row.id = rowidx;
 
-	//i have to do this since for some reason js just decides to convert a map to an object
-	const mapRowidx = new Map(Object.entries(rowdata));
+// 	//i have to do this since for some reason js just decides to convert a map to an object
+// 	const mapRowidx = new Map(Object.entries(rowdata));
 
-	let elelment = new Row(mapRowidx);
+// 	const defineRowIdx = document.createElement("td");
+// 	defineRowIdx.className = "small rowIdx";
+// 	defineRowIdx.innerHTML = `<input type="text" value="${rowidx}" name="${rowidx}" disabled>`;
+// 	row.appendChild(defineRowIdx);
 
-	const defineRowIdx = document.createElement("td");
-	defineRowIdx.className = "small rowIdx";
-	defineRowIdx.innerHTML = `<input type="text" value="${rowidx}" name="${rowidx}" disabled>`;
-	row.appendChild(defineRowIdx);
+// 	for (let i = 0; i < keys.length; i++) {
+// 		const td = document.createElement("td");
+// 		const v = mapRowidx.get(keys[i]) == undefined ? "" : mapRowidx.get(keys[i]);
+// 		td.className = isSmall(keys[i]);
+// 		td.innerHTML = `<input type="text" value="${v}" name="${keys[i]}">`;
+// 		row.appendChild(td);
+// 	}
 
-	for (let i = 0; i < keys.length; i++) {
-		const td = document.createElement("td");
-		const v = mapRowidx.get(keys[i]) == undefined ? "" : mapRowidx.get(keys[i]);
-		td.className = isSmall(keys[i]);
-		td.innerHTML = `<input type="text" value="${v}" name="${keys[i]}">`;
-		row.appendChild(td);
-	}
+// 	return row;
+// }
 
-	return row;
-}
-
-async function search(searchString: string, searchSection: string, filters: filterType): Promise<rowDataType> {
+async function search(searchString: string, tickedSections: Map<string, boolean>, filters: filterType): Promise<rowDataType> {
 	try {
 		const resp = await fetch("http://localhost:8080/search/", {
 			method: "POST",
 			body: JSON.stringify({
 				search: searchString,
-				section: searchSection,
+				checkedSectons: JSON.stringify(tickedSections.entries),
 				filters: JSON.stringify(Object.fromEntries(filters)),
 			}),
 			headers: {
@@ -128,19 +131,34 @@ async function search(searchString: string, searchSection: string, filters: filt
 
 		const json = JSON.parse(responseText);
 
-		const rowData = new Map(Object.entries(json["Data"])) as rowDataType;
+		const ImportedData = new Map(Object.entries(json["Data"])) as rowDataType;
+
 		Keys = json["Keyset"];
+
+		let el = SectionCheckBox.children[0].children[0] as HTMLInputElement;
+
+		console.log(el.checked);
+
+		// loadRowsAsObjects(ImportedData);
+
+		// console.log(el.getHTMLRowElement(Keys));
+
 		drawTitleRow();
 
 		CurrentPage = 0;
-		PageData = makePages(rowData);
 		switchPage(0);
 
-		return rowData;
+		return ImportedData;
 	} catch (err) {
 		console.log(err);
 		return new Map();
 	}
+}
+
+function loadRowsAsObjects(ROWDATA: rowDataType, WORKSHEET: number) {
+	ROWDATA.forEach((rowData, rowPosition) => {
+		LoadedRows[WORKSHEET].push(new Row(rowData, rowPosition));
+	});
 }
 
 function makeFiltersMap(Filters: HTMLElement): filterType {
@@ -175,8 +193,8 @@ function drawDataInTable(data: rowDataType[], keys: string[]) {
 		if (data[row] == undefined) continue;
 		const rowIdx = data[row].keys().next().value as string;
 
-		const el = makeRowElement(rowIdx, data[row].get(rowIdx) as Map<string, string>, keys) as HTMLElement;
-		DataWrapper.appendChild(el);
+		// const el = makeRowElement(rowIdx, data[row].get(rowIdx) as Map<string, string>, keys) as HTMLElement;
+		// DataWrapper.appendChild(el);
 	}
 }
 
@@ -230,4 +248,11 @@ function makePages(data: rowDataType): rowDataType[][] {
 		}
 	}
 	return returnData;
+}
+
+function switchPage(page: number) {
+	// drawDataInTable(PageData[page], Keys);
+	prevPage(true);
+	nextPage(true);
+	PageCounter.innerHTML = `${page + 1}/${MaxPages}`;
 }
