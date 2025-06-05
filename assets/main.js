@@ -9,16 +9,18 @@ const PageCounter = document.getElementById("pageCounter");
 const SectionCheckBox = document.getElementById("sectionCheckBox");
 const MaxRowPerPage = 150;
 let MaxPages = 0;
-let CurrentPage = 0;
-let Keys = [];
-let LoadedRows = new Map();
-let SavedRows = new Map();
+let _CurrentPage = 0;
+let _Sections;
+let _Keys;
+let _LoadedRows = new Map();
+let _SavedRows = new Map();
+let _LoadedPages;
 fetch("http://localhost:8080/base/")
     .then((resp) => resp.json())
     .then((json) => main(json));
 function main(json) {
     const Filters = json[0];
-    const Sections = json[1];
+    _Sections = json[1];
     for (let i = 0; i < Filters.length; i++) {
         const el = document.createElement("tr");
         el.className = "inputForCat";
@@ -28,11 +30,11 @@ function main(json) {
 		`;
         DialogueFilterWrapper?.appendChild(el);
     }
-    for (let i = 0; i < Sections.length; i++) {
+    for (let i = 0; i < _Sections.length; i++) {
         const el = document.createElement("div");
         el.innerHTML = `
-			<input type="checkbox" name="${Sections[i]}" id="${Sections[i]}">
-			<label for="${Sections[i]}">${Sections[i]}</label><br>
+			<input type="checkbox" name="${_Sections[i]}" id="${_Sections[i]}">
+			<label for="${_Sections[i]}">${_Sections[i]}</label><br>
 		`;
         SectionCheckBox?.appendChild(el);
     }
@@ -73,20 +75,21 @@ async function search(searchString, tickedSections, filters) {
                 "Content-type": "application/json; charset=UTF-8",
             },
         });
-        LoadedRows = new Map();
+        _LoadedRows = new Map();
         const responseText = await resp.text();
         const json = JSON.parse(responseText);
         const ImportedData = new Map(Object.entries(json["Data"]));
-        Keys = json["Keyset"];
+        _Keys = json["Keyset"];
         for (let [section, sectionData] of Object.entries(json["Data"])) {
             if (sectionData == null || Object.keys(sectionData).length == 0) {
                 continue;
             }
             loadRowsAsObjects(section, new Map(Object.entries(sectionData)));
         }
-        console.log(LoadedRows);
+        _LoadedPages = makePages(_LoadedRows);
+        console.log(_LoadedPages);
         drawTitleRow();
-        CurrentPage = 0;
+        _CurrentPage = 0;
         switchPage(0);
         return ImportedData;
     }
@@ -97,10 +100,10 @@ async function search(searchString, tickedSections, filters) {
 }
 function loadRowsAsObjects(SECTION, SECTIONDATA) {
     SECTIONDATA.forEach((rowData, rowPosition) => {
-        let rowArray = LoadedRows.get(SECTION);
+        let rowArray = _LoadedRows.get(SECTION);
         if (rowArray == undefined) {
-            LoadedRows.set(SECTION, []);
-            rowArray = LoadedRows.get(SECTION);
+            _LoadedRows.set(SECTION, []);
+            rowArray = _LoadedRows.get(SECTION);
             rowArray?.push(new Row(rowData, rowPosition, SECTION));
         }
         else {
@@ -124,7 +127,7 @@ function drawTitleRow() {
 	<th scope="col">munkafüzet</th>
 	<th scope="col">oszlop, sor</th>
 	`;
-    Keys.forEach((key) => {
+    _Keys.forEach((key) => {
         const el = document.createElement("th");
         el.innerHTML = key;
         el.setAttribute("scope", "col");
@@ -133,25 +136,23 @@ function drawTitleRow() {
 }
 function drawDataInTable(data, keys) {
     DataWrapper.innerHTML = ``;
-    data.forEach((rowArray) => {
-        rowArray.forEach((rowElement) => {
-            DataWrapper.appendChild(rowElement.getHTMLRowElement(keys));
-        });
+    data.forEach((rowElement) => {
+        DataWrapper.appendChild(rowElement.getHTMLRowElement(keys));
     });
 }
-function getSortedElementsList(elements) {
+function getSortedRowElements(elements) {
     let returnArray = [];
     let idxArray = [];
     let columns = [];
-    for (const [key, _] of elements.entries()) {
-        const idx = key.split(", ");
+    for (const row of elements) {
+        const idx = row.position.split(", ");
         columns.push(parseInt(idx[0]));
     }
     for (let i = 0; i < Math.max(...columns); i++) {
         idxArray.push([]);
     }
-    for (const [key, _] of elements.entries()) {
-        const idx = key.split(", ");
+    for (const row of elements) {
+        const idx = row.position.split(", ");
         idxArray[parseInt(idx[0]) - 1].push(parseInt(idx[1]));
     }
     for (let i = 0; i < idxArray.length; i++) {
@@ -162,31 +163,38 @@ function getSortedElementsList(elements) {
             continue;
         }
         for (let l = 0; l < idxArray[i].length; l++) {
-            returnArray.push(`${i + 1}, ${idxArray[i][l]}`);
+            for (let row of elements) {
+                const posAsString = `${i + 1}, ${idxArray[i][l]}`;
+                if (row.position == posAsString) {
+                    returnArray.push(row);
+                    break;
+                }
+            }
         }
     }
     return returnArray;
 }
 function makePages(data) {
     let returnData = [];
-    const sortedElementList = getSortedElementsList(data);
+    let sortedElementList = [];
+    data.forEach((sectionData) => {
+        sortedElementList.push(...getSortedRowElements(sectionData));
+    });
     MaxPages = Math.ceil(sortedElementList.length / MaxRowPerPage);
-    for (let i = 0; i < MaxPages; i++) {
+    for (let page = 0; page < MaxPages; page++) {
         returnData.push([]);
-        for (let l = 0; l < MaxRowPerPage; l++) {
-            const elIdx = sortedElementList[i * MaxRowPerPage + l];
-            if (elIdx == undefined) {
+        for (let rowIdx = 0; rowIdx < MaxRowPerPage; rowIdx++) {
+            const element = sortedElementList[page * MaxRowPerPage + rowIdx];
+            if (element == undefined) {
                 continue;
             }
-            let idxMap = new Map();
-            idxMap.set(elIdx, data.get(elIdx));
-            returnData[i].push(idxMap);
+            returnData[page].push(element);
         }
     }
     return returnData;
 }
 function switchPage(page) {
-    drawDataInTable(LoadedRows, Keys);
+    drawDataInTable(_LoadedPages[page], _Keys);
     prevPage(true);
     nextPage(true);
     PageCounter.innerHTML = `${page + 1}/${MaxPages}`;

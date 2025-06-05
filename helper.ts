@@ -12,7 +12,7 @@ function prevPage(reset?: boolean) {
 	const el = document.getElementById("prevPage") as HTMLButtonElement;
 
 	if (reset) {
-		if (CurrentPage == 0) {
+		if (_CurrentPage == 0) {
 			el.setAttribute("disabled", "");
 		} else {
 			el.removeAttribute("disabled");
@@ -20,9 +20,9 @@ function prevPage(reset?: boolean) {
 		return;
 	}
 
-	if (CurrentPage != 0) {
-		CurrentPage--;
-		switchPage(CurrentPage);
+	if (_CurrentPage != 0) {
+		_CurrentPage--;
+		switchPage(_CurrentPage);
 	}
 }
 
@@ -30,15 +30,15 @@ function nextPage(reset?: boolean) {
 	const el = document.getElementById("nextPage") as HTMLButtonElement;
 
 	if (reset) {
-		if (CurrentPage == MaxPages - 1) {
+		if (_CurrentPage == MaxPages - 1) {
 			el.setAttribute("disabled", "");
 		} else {
 			el.removeAttribute("disabled");
 		}
 	} else {
-		if (CurrentPage != MaxPages - 1) {
-			CurrentPage++;
-			switchPage(CurrentPage);
+		if (_CurrentPage != MaxPages - 1) {
+			_CurrentPage++;
+			switchPage(_CurrentPage);
 		}
 	}
 }

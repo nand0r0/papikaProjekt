@@ -10,7 +10,7 @@ function closeModal() {
 function prevPage(reset) {
     const el = document.getElementById("prevPage");
     if (reset) {
-        if (CurrentPage == 0) {
+        if (_CurrentPage == 0) {
             el.setAttribute("disabled", "");
         }
         else {
@@ -18,15 +18,15 @@ function prevPage(reset) {
         }
         return;
     }
-    if (CurrentPage != 0) {
-        CurrentPage--;
-        switchPage(CurrentPage);
+    if (_CurrentPage != 0) {
+        _CurrentPage--;
+        switchPage(_CurrentPage);
     }
 }
 function nextPage(reset) {
     const el = document.getElementById("nextPage");
     if (reset) {
-        if (CurrentPage == MaxPages - 1) {
+        if (_CurrentPage == MaxPages - 1) {
             el.setAttribute("disabled", "");
         }
         else {
@@ -34,9 +34,9 @@ function nextPage(reset) {
         }
     }
     else {
-        if (CurrentPage != MaxPages - 1) {
-            CurrentPage++;
-            switchPage(CurrentPage);
+        if (_CurrentPage != MaxPages - 1) {
+            _CurrentPage++;
+            switchPage(_CurrentPage);
         }
     }
 }

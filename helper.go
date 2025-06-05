@@ -64,7 +64,6 @@ func isFilterInData(filter map[string]string, data map[string]string, search str
 	return val
 }
 
-
 func combineKeysets(selectedSections []string, keymap map[string][]string) []string {
 	var combinedKeyset []string
 	for _, v := range selectedSections {
@@ -82,6 +81,5 @@ func combineAllKeysets(keymap map[string][]string) []string {
 			if !slices.Contains(combinedKeyset, key) {combinedKeyset = append(combinedKeyset, key)}
 		}
 	}
-	fmt.Println(combinedKeyset)
 	return combinedKeyset
 }
