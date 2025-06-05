@@ -48,7 +48,7 @@
 		align-items: center;
 		margin: 0px 10px;
 		input {
-			width: 200px;
+			width: 50px !important;
 			margin: 0px !important;
 		}
 	}

@@ -28,7 +28,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	searchParams := []string{"betű", "látva", "országrész", "vármegye1914", "járás1914", "helység", "VKK"}
 	sections := []string{"VKK", "templom", "látnivalók", "VKKBudapest", "MOn kívüli magyar", "elbontott"}
 
 	//sectionName -> sectionData
@@ -65,6 +64,7 @@ func main() {
 
 	fmt.Println("Kész!")
 
+	
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		
@@ -73,7 +73,7 @@ func main() {
 	})
 
 	http.HandleFunc("/base/", func(w http.ResponseWriter, r *http.Request) {
-		sendData, err := json.Marshal([][]string{searchParams, sections})
+		sendData, err := json.Marshal([][]string{combineAllKeysets(KEYMAP), sections})
 		if err != nil {
 			fmt.Println(err)
 			return
@@ -109,13 +109,29 @@ func main() {
 			return
 		}
 
+		var sectionCheckBoxes map[string]bool
+		err = json.Unmarshal([]byte(INPUT["checkedSections"]), &sectionCheckBoxes)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
 		type sendType struct {
 			Keyset []string
-			Data mainDataType	
+			Data map[string]mainDataType
 		}
-	
-		output := getSection(SECTIONMAP[INPUT["section"]], KEYMAP[INPUT["section"]], INPUT["search"], filters)
-		OUTPUT, err := json.Marshal(sendType{KEYMAP[INPUT["section"]], output})
+
+		processedSections := make(map[string]mainDataType) 
+		var selectedSections []string
+
+		for section, selected := range sectionCheckBoxes {
+			if selected {
+				selectedSections = append(selectedSections, section)
+				processedSections[section] = getDataFromSection(section, SECTIONMAP, KEYMAP[section], INPUT["search"], filters) 
+			}
+		}
+
+		OUTPUT, err := json.Marshal(sendType{combineKeysets(selectedSections, KEYMAP), processedSections})
 		if err != nil {
 			fmt.Println(err)
 			return

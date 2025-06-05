@@ -41,27 +41,36 @@ function nextPage(reset) {
     }
 }
 class Row {
-    worksheet;
-    rowPosition;
-    rowData;
-    constructor(DATA, ROWPOSITION, WORKSHEET) {
-        this.rowData = new Map(Object.entries(DATA));
-        this.rowPosition = ROWPOSITION;
-        this.worksheet = WORKSHEET ? WORKSHEET : -1;
+    section;
+    position;
+    data;
+    constructor(DATA, ROWPOSITION, SECTION) {
+        this.data = new Map(Object.entries(DATA));
+        this.position = ROWPOSITION;
+        this.section = SECTION;
     }
     getHTMLRowElement(keyset) {
         const tr = document.createElement("tr");
-        tr.id = this.rowPosition;
+        tr.id = this.position;
+        const defineRowSection = document.createElement("td");
         const defineRowIdx = document.createElement("td");
+        defineRowSection.className = "small rowIdx";
         defineRowIdx.className = "small rowIdx";
-        defineRowIdx.innerHTML = `<input type="text" value="${this.rowPosition}" name="${this.rowPosition}" disabled>`;
+        defineRowSection.innerHTML = `<input type="text" value="${this.section}" name="${this.section}" disabled>`;
+        defineRowIdx.innerHTML = `<input type="text" value="${this.position}" name="${this.position}" disabled>`;
+        tr.appendChild(defineRowSection);
         tr.appendChild(defineRowIdx);
         for (let i = 0; i < keyset.length; i++) {
             const td = document.createElement("td");
             const currentKey = keyset[i];
-            const v = this.rowData.get(currentKey) == undefined ? "" : this.rowData.get(currentKey);
+            if (this.data.get(currentKey) == undefined) {
+                td.innerHTML = `<input type="text" disabled name="${currentKey}">`;
+            }
+            else {
+                const v = this.data.get(currentKey) == undefined ? "" : this.data.get(currentKey);
+                td.innerHTML = `<input type="text" value="${v}" name="${currentKey}">`;
+            }
             td.className = isSmall(currentKey);
-            td.innerHTML = `<input type="text" value="${v}" name="${currentKey}">`;
             tr.appendChild(td);
         }
         return tr;

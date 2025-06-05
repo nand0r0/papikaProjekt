@@ -18,8 +18,8 @@ let MaxPages = 0;
 let CurrentPage = 0;
 
 let Keys: string[] = [];
-let LoadedRows: Row[][] = [];
-let SavedRows: Row[][] = [];
+let LoadedRows = new Map<string, Row[]>();
+let SavedRows = new Map<string, Row[]>();
 
 fetch("http://localhost:8080/base/")
 	.then((resp) => resp.json())
@@ -42,15 +42,7 @@ function main(json: string[][]) {
 		DialogueFilterWrapper?.appendChild(el);
 	}
 
-	//adds the sections to the section dropdown selector
-	for (let i = 0; i < Sections.length; i++) {
-		const el = document.createElement("option");
-
-		el.value = Sections[i];
-		el.innerHTML = Sections[i];
-		SectionsWrapper?.appendChild(el);
-	}
-
+	//adds the sections as checkboxes into the modal
 	for (let i = 0; i < Sections.length; i++) {
 		const el = document.createElement("div");
 		el.innerHTML = `
@@ -61,12 +53,12 @@ function main(json: string[][]) {
 		SectionCheckBox?.appendChild(el);
 	}
 
-	function getAllSearchParams(): [string, Map<string, boolean>, filterType] {
-		let checkedSections = new Map<string, boolean>();
+	function getAllSearchParams(): [string, { [index: string]: boolean }, filterType] {
+		let checkedSections: { [index: string]: boolean } = {};
 
 		for (let i of SectionCheckBox.children) {
 			let checkbox = i.children[0] as HTMLInputElement;
-			checkedSections.set(checkbox.id, checkbox.checked);
+			checkedSections[checkbox.id] = checkbox.checked;
 		}
 		return [SearchBox.value, checkedSections, makeFiltersMap(DialogueFilterWrapper)];
 	}
@@ -90,42 +82,21 @@ function isSmall(name: string): string {
 	return "";
 }
 
-// function makeRowElement(rowidx: string, rowdata: Map<string, string>, keys: string[]): HTMLElement {
-// 	const row = document.createElement("tr");
-// 	row.id = rowidx;
-
-// 	//i have to do this since for some reason js just decides to convert a map to an object
-// 	const mapRowidx = new Map(Object.entries(rowdata));
-
-// 	const defineRowIdx = document.createElement("td");
-// 	defineRowIdx.className = "small rowIdx";
-// 	defineRowIdx.innerHTML = `<input type="text" value="${rowidx}" name="${rowidx}" disabled>`;
-// 	row.appendChild(defineRowIdx);
-
-// 	for (let i = 0; i < keys.length; i++) {
-// 		const td = document.createElement("td");
-// 		const v = mapRowidx.get(keys[i]) == undefined ? "" : mapRowidx.get(keys[i]);
-// 		td.className = isSmall(keys[i]);
-// 		td.innerHTML = `<input type="text" value="${v}" name="${keys[i]}">`;
-// 		row.appendChild(td);
-// 	}
-
-// 	return row;
-// }
-
-async function search(searchString: string, tickedSections: Map<string, boolean>, filters: filterType): Promise<rowDataType> {
+async function search(searchString: string, tickedSections: { [index: string]: boolean }, filters: filterType): Promise<rowDataType> {
 	try {
 		const resp = await fetch("http://localhost:8080/search/", {
 			method: "POST",
 			body: JSON.stringify({
 				search: searchString,
-				checkedSectons: JSON.stringify(tickedSections.entries),
+				checkedSections: JSON.stringify(tickedSections),
 				filters: JSON.stringify(Object.fromEntries(filters)),
 			}),
 			headers: {
 				"Content-type": "application/json; charset=UTF-8",
 			},
 		});
+
+		LoadedRows = new Map<string, Row[]>();
 
 		const responseText = await resp.text();
 
@@ -135,13 +106,15 @@ async function search(searchString: string, tickedSections: Map<string, boolean>
 
 		Keys = json["Keyset"];
 
-		let el = SectionCheckBox.children[0].children[0] as HTMLInputElement;
+		for (let [section, sectionData] of Object.entries(json["Data"])) {
+			if (sectionData == null || Object.keys(sectionData).length == 0) {
+				continue;
+			}
 
-		console.log(el.checked);
+			loadRowsAsObjects(section, new Map(Object.entries(sectionData)));
+		}
 
-		// loadRowsAsObjects(ImportedData);
-
-		// console.log(el.getHTMLRowElement(Keys));
+		console.log(LoadedRows);
 
 		drawTitleRow();
 
@@ -155,15 +128,22 @@ async function search(searchString: string, tickedSections: Map<string, boolean>
 	}
 }
 
-function loadRowsAsObjects(ROWDATA: rowDataType, WORKSHEET: number) {
-	ROWDATA.forEach((rowData, rowPosition) => {
-		LoadedRows[WORKSHEET].push(new Row(rowData, rowPosition));
+function loadRowsAsObjects(SECTION: string, SECTIONDATA: rowDataType) {
+	SECTIONDATA.forEach((rowData, rowPosition) => {
+		let rowArray = LoadedRows.get(SECTION);
+		if (rowArray == undefined) {
+			LoadedRows.set(SECTION, []);
+			rowArray = LoadedRows.get(SECTION);
+			rowArray?.push(new Row(rowData, rowPosition, SECTION));
+		} else {
+			rowArray?.push(new Row(rowData, rowPosition, SECTION));
+		}
 	});
 }
 
-function makeFiltersMap(Filters: HTMLElement): filterType {
+function makeFiltersMap(FILTERS: HTMLElement): filterType {
 	let idx: filterType = new Map();
-	const filterElements = Filters.children;
+	const filterElements = FILTERS.children;
 
 	for (let i = 0; i < filterElements.length; i++) {
 		const key = filterElements[i].querySelector(".text")?.innerHTML as string;
@@ -176,7 +156,7 @@ function makeFiltersMap(Filters: HTMLElement): filterType {
 
 function drawTitleRow() {
 	TitleWrapper.innerHTML = `
-	<!-- <th scope="col">munkafüzet</th> -->
+	<th scope="col">munkafüzet</th>
 	<th scope="col">oszlop, sor</th>
 	`;
 	Keys.forEach((key: string) => {
@@ -187,15 +167,13 @@ function drawTitleRow() {
 	});
 }
 
-function drawDataInTable(data: rowDataType[], keys: string[]) {
+function drawDataInTable(data: Map<string, Row[]>, keys: string[]) {
 	DataWrapper.innerHTML = ``;
-	for (let row = 0; row < data.length; row++) {
-		if (data[row] == undefined) continue;
-		const rowIdx = data[row].keys().next().value as string;
-
-		// const el = makeRowElement(rowIdx, data[row].get(rowIdx) as Map<string, string>, keys) as HTMLElement;
-		// DataWrapper.appendChild(el);
-	}
+	data.forEach((rowArray: Row[]) => {
+		rowArray.forEach((rowElement) => {
+			DataWrapper.appendChild(rowElement.getHTMLRowElement(keys));
+		});
+	});
 }
 
 function getSortedElementsList(elements: rowDataType): string[] {
@@ -251,7 +229,7 @@ function makePages(data: rowDataType): rowDataType[][] {
 }
 
 function switchPage(page: number) {
-	// drawDataInTable(PageData[page], Keys);
+	drawDataInTable(LoadedRows, Keys);
 	prevPage(true);
 	nextPage(true);
 	PageCounter.innerHTML = `${page + 1}/${MaxPages}`;

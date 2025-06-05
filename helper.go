@@ -2,14 +2,15 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
-func getSection(sectionData [][]string, keys []string, search string, filters map[string]string) mainDataType {
+func getDataFromSection(section string, sectionMap map[string][][]string, keys []string, search string, filters map[string]string) mainDataType {
 
 	output := make(mainDataType)
 
-	for rowidx, row := range sectionData {
+	for rowidx, row := range sectionMap[section]{
 		if rowidx == 0 {
 			continue
 		}
@@ -61,4 +62,26 @@ func isFilterInData(filter map[string]string, data map[string]string, search str
 		}
 	}
 	return val
+}
+
+
+func combineKeysets(selectedSections []string, keymap map[string][]string) []string {
+	var combinedKeyset []string
+	for _, v := range selectedSections {
+		for _, key := range keymap[v] {
+			if !slices.Contains(combinedKeyset, key) {combinedKeyset = append(combinedKeyset, key)}
+		}
+	}
+	return combinedKeyset
+}
+
+func combineAllKeysets(keymap map[string][]string) []string {
+	var combinedKeyset []string
+	for _, v := range keymap {
+		for _, key := range v {
+			if !slices.Contains(combinedKeyset, key) {combinedKeyset = append(combinedKeyset, key)}
+		}
+	}
+	fmt.Println(combinedKeyset)
+	return combinedKeyset
 }

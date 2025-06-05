@@ -17,7 +17,7 @@
 		<dialog closed id="modal">
 			<article>
 				<header>
-					<!-- <button aria-label="Close" rel="prev" onclick="closeModal('clear')"></button> -->
+					<button aria-label="Close" rel="prev" onclick="closeModal()"></button>
 					<p>
 						<strong>Szűrés</strong>
 					</p>
@@ -25,10 +25,15 @@
 				<table>
 					<thead></thead>
 					<tbody id="listWrapper">
-
+						<div id="search">
+							<input type="text" placeholder="Keresés" name="search" id="searchBox" />
+							<button class="secondary" id="searchButton">Keresés</button>
+						</div>
+						<br>
 						<!-- <div></div> -->
 						<div id="sectionCheckBox"></div>
 						<br>
+						
 					</tbody>
 				</table>
 				<footer>
@@ -38,13 +43,9 @@
 		<!-- <th scope="col">munkafüzet</th> -->
 		<div id="nav">
 			<button onclick="save()" id="save" disabled>Mentés</button>
+			<!-- <button style="margin-left: 10px;">Fájl újratöltése</button> -->
 			<button onclick="openModal()" style="margin-left: 10px;">Szűrés</button>
-			<button style="margin-left: 10px;">Fájl újratöltése</button>
-			<select name="sections" id="sections"></select>
-			<div id="search">
-				<input type="text" placeholder="Keresés" name="search" id="searchBox" />
-				<button class="secondary" id="searchButton">Keresés</button>
-			</div>
+			
 			
 			<div id="selectPage">
 				<button onclick="prevPage()" id="prevPage" style="margin-right: 0px;" disabled>&lt;</button>
