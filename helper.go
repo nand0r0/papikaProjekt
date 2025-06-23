@@ -2,15 +2,19 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"slices"
 	"strings"
+	"sync"
+
+	"github.com/xuri/excelize/v2"
 )
 
-func getDataFromSection(section string, sectionMap map[string][][]string, keys []string, search string, filters map[string]string) mainDataType {
+func getFilteredDataFromSheet(sheetName string, sheetMap map[string][][]string, keys []string, search string, filters map[string]string) (sheetData mainDataType) {
 
-	output := make(mainDataType)
+	sheetData = make(mainDataType)
 
-	for rowidx, row := range sectionMap[section]{
+	for rowidx, row := range sheetMap[sheetName]{
 		if rowidx == 0 {
 			continue
 		}
@@ -30,7 +34,7 @@ func getDataFromSection(section string, sectionMap map[string][][]string, keys [
 					continue
 				}
 				if isFilterInData(filters, rowData, search) {
-					output[fmt.Sprintf("%v, %v", colCount+1, rowidx+2)] = rowData
+					sheetData[fmt.Sprintf("%v, %v", colCount+1, rowidx+1)] = rowData
 				}
 				colCount++
 				rowData = make(map[string]string)
@@ -46,26 +50,25 @@ func getDataFromSection(section string, sectionMap map[string][][]string, keys [
 
 		}
 	}
-	return output
+	return sheetData
 }
 
-func isFilterInData(filter map[string]string, data map[string]string, search string) bool {
-	val := false
+func isFilterInData(filter map[string]string, data map[string]string, search string) (returnValue bool) {
+	returnValue = false
 	for _, value := range data {
 		if strings.Contains(strings.ToLower(value), strings.ToLower(search)) {
-			val = true
+			returnValue = true
 			for Filterkey := range filter {
 				if !(strings.Contains(strings.ToLower(data[Filterkey]), strings.ToLower(filter[Filterkey]))) {
-					val = false
+					returnValue = false
 				}
 			}
 		}
 	}
-	return val
+	return returnValue
 }
 
-func combineKeysets(selectedSections []string, keymap map[string][]string) []string {
-	var combinedKeyset []string
+func combineKeysets(selectedSections []string, keymap map[string][]string) (combinedKeyset []string) {
 	for _, v := range selectedSections {
 		for _, key := range keymap[v] {
 			if !slices.Contains(combinedKeyset, key) {combinedKeyset = append(combinedKeyset, key)}
@@ -74,12 +77,49 @@ func combineKeysets(selectedSections []string, keymap map[string][]string) []str
 	return combinedKeyset
 }
 
-func combineAllKeysets(keymap map[string][]string) []string {
-	var combinedKeyset []string
+func combineAllKeysets(keymap map[string][]string) (combinedKeyset []string) {
 	for _, v := range keymap {
 		for _, key := range v {
 			if !slices.Contains(combinedKeyset, key) {combinedKeyset = append(combinedKeyset, key)}
 		}
 	}
 	return combinedKeyset
+}
+
+func getFileData(filePath string, sheetNames []string) (sheetsDataMap map[string][][]string, keyMap map[string][]string, file *excelize.File) {
+	fmt.Println("Betöltés...")
+	sheetsDataMap = make(map[string][][]string)
+	keyMap = make(map[string][]string)
+	file, err := excelize.OpenFile(filePath)
+	if err != nil {
+		fmt.Printf("%v Press enter to exit.", err)
+		fmt.Scanln()
+		os.Exit(1)
+	}
+	var wg sync.WaitGroup
+
+	for _, sectionName := range sheetNames {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rows, err := file.GetRows(sectionName)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			sheetsDataMap[sectionName] = rows
+
+			for i, row := range rows {	
+				if i > 0 {break}
+				
+				for _, el := range row {
+					if el == "határ" {break}
+					keyMap[sectionName] = append(keyMap[sectionName], el)
+				}
+			}
+		}()
+	}
+	wg.Wait()	
+	fmt.Println("Kész!")
+	return sheetsDataMap, keyMap, file
 }

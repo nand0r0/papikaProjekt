@@ -6,18 +6,15 @@
 		<title>Document</title>
 		<meta name="color-scheme" content="light dark" />
 		<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
-		<!-- <link rel="stylesheet" href="assets/styles.css" /> -->
+		<link rel="stylesheet" href="assets/styles.css">
 		<script defer type="text/javascript" src="assets/main.js" type="module"></script>
 		<script defer type="text/javascript" src="assets/helper.js" type="module"></script>
 	</head>
-
-	<link rel="stylesheet" href="assets/styles.css">
-
 	<body>
-		<dialog closed id="modal">
+		<dialog closed id="searchPromptModal">
 			<article>
 				<header>
-					<button aria-label="Close" rel="prev" onclick="closeModal()"></button>
+					<button aria-label="Close" rel="prev" onclick="closeModal('searchPromptModal')"></button>
 					<p>
 						<strong>Szűrés</strong>
 					</p>
@@ -30,29 +27,26 @@
 							<button class="secondary" id="searchButton">Keresés</button>
 						</div>
 						<br>
-						<!-- <div></div> -->
 						<div id="sectionCheckBox"></div>
-						<br>
-						
+						<br>	
 					</tbody>
 				</table>
 				<footer>
-					<button onclick="closeModal()">Mentés</button>
 			</article>
 		</dialog>
-		<!-- <th scope="col">munkafüzet</th> -->
 		<div id="nav">
-			<button onclick="save()" id="save" disabled>Mentés</button>
+			<button onclick="reloadFile()" id="reloadFile" style="margin-left: 10px;">Fálj újratöltése</button>
+			<button onclick="save()" id="save" style="margin-left: 10px;">Mentés</button>
+			<button onclick="saveAs()" id="saveAs" style="margin-left: 10px;">Mentés másként</button>
 			<!-- <button style="margin-left: 10px;">Fájl újratöltése</button> -->
-			<button onclick="openModal()" style="margin-left: 10px;">Szűrés</button>
-			
+			<button onclick="openModal('searchPromptModal')" style="margin-left: 10px;">Szűrés</button>
 			
 			<div id="selectPage">
-				<button onclick="prevPage()" id="prevPage" style="margin-right: 0px;" disabled>&lt;</button>
+				<button onclick="prevPage()" id="prevPage" style="margin-right: 0px;" class="secondary" disabled>&lt;</button>
 				<div style="height: min-content; align-self: center; margin-bottom: 0px; height: min-content;">
-					<p id="pageCounter">0/0</p>
+					<p id="pageCounter">0/0📃</p>
 				</div>
-				<button onclick="nextPage()" id="nextPage" disabled>&gt;</button>
+				<button onclick="nextPage()" id="nextPage" class="secondary" disabled>&gt;</button>
 			</div>
 			
 		</div>

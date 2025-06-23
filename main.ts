@@ -7,21 +7,24 @@ type rowDataType = Map<string, Map<string, string>>;
 const TitleWrapper = document.getElementById("titles") as HTMLElement;
 const DataWrapper = document.getElementById("dataWrapper") as HTMLElement;
 const DialogueFilterWrapper = document.getElementById("listWrapper") as HTMLElement;
-const SectionsWrapper = document.getElementById("sections") as HTMLSelectElement;
+const SheetsWrapper = document.getElementById("sections") as HTMLSelectElement;
 const SearchBox = document.getElementById("searchBox") as HTMLInputElement;
 const SearchButton = document.getElementById("searchButton") as HTMLButtonElement;
 const PageCounter = document.getElementById("pageCounter") as HTMLElement;
-const SectionCheckBox = document.getElementById("sectionCheckBox") as HTMLElement;
+const SheetCheckBox = document.getElementById("sectionCheckBox") as HTMLElement;
+const Savebutton = document.getElementById("save") as HTMLButtonElement;
 
 const MaxRowPerPage = 150;
 let MaxPages = 0;
 let _CurrentPage = 0;
 
-let _Sections: string[];
+let _SheetNames: string[];
 let _Keys: string[];
 let _LoadedRows = new Map<string, Row[]>();
-let _SavedRows = new Map<string, Row[]>();
+let _CachedRows = new Map<string, Row[]>();
 let _LoadedPages: Row[][];
+
+let _IsRendering = false;
 
 fetch("http://localhost:8080/base/")
 	.then((resp) => resp.json())
@@ -29,9 +32,7 @@ fetch("http://localhost:8080/base/")
 
 function main(json: string[][]) {
 	const Filters: string[] = json[0];
-	_Sections = json[1];
-
-	//section titles
+	_SheetNames = json[1];
 
 	//adds the elements to the search parameters inside the modal
 	for (let i = 0; i < Filters.length; i++) {
@@ -45,24 +46,24 @@ function main(json: string[][]) {
 	}
 
 	//adds the sections as checkboxes into the modal
-	for (let i = 0; i < _Sections.length; i++) {
+	for (let i = 0; i < _SheetNames.length; i++) {
 		const el = document.createElement("div");
 		el.innerHTML = `
-			<input type="checkbox" name="${_Sections[i]}" id="${_Sections[i]}">
-			<label for="${_Sections[i]}">${_Sections[i]}</label><br>
+			<input type="checkbox" name="${_SheetNames[i]}" id="${_SheetNames[i]}">
+			<label for="${_SheetNames[i]}">${_SheetNames[i]}</label><br>
 		`;
 
-		SectionCheckBox?.appendChild(el);
+		SheetCheckBox?.appendChild(el);
 	}
 
 	function getAllSearchParams(): [string, { [index: string]: boolean }, filterType] {
-		let checkedSections: { [index: string]: boolean } = {};
+		let checkedSheets: { [index: string]: boolean } = {};
 
-		for (let i of SectionCheckBox.children) {
+		for (let i of SheetCheckBox.children) {
 			let checkbox = i.children[0] as HTMLInputElement;
-			checkedSections[checkbox.id] = checkbox.checked;
+			checkedSheets[checkbox.id] = checkbox.checked;
 		}
-		return [SearchBox.value, checkedSections, makeFiltersMap(DialogueFilterWrapper)];
+		return [SearchBox.value, checkedSheets, makeFiltersMap(DialogueFilterWrapper)];
 	}
 
 	SearchBox?.addEventListener("keydown", (keypress) => {
@@ -84,13 +85,13 @@ function isSmall(name: string): string {
 	return "";
 }
 
-async function search(searchString: string, tickedSections: { [index: string]: boolean }, filters: filterType): Promise<rowDataType> {
+async function search(searchString: string, tickedSheets: { [index: string]: boolean }, filters: filterType) {
 	try {
 		const resp = await fetch("http://localhost:8080/search/", {
 			method: "POST",
 			body: JSON.stringify({
 				search: searchString,
-				checkedSections: JSON.stringify(tickedSections),
+				checkedSheets: JSON.stringify(tickedSheets),
 				filters: JSON.stringify(Object.fromEntries(filters)),
 			}),
 			headers: {
@@ -98,56 +99,55 @@ async function search(searchString: string, tickedSections: { [index: string]: b
 			},
 		});
 
-		_LoadedRows = new Map<string, Row[]>();
+		_LoadedRows = new Map();
 
 		const responseText = await resp.text();
 
 		const json = JSON.parse(responseText);
 
-		const ImportedData = new Map(Object.entries(json["Data"])) as rowDataType;
-
 		_Keys = json["Keyset"];
 
-		for (let [section, sectionData] of Object.entries(json["Data"])) {
-			if (sectionData == null || Object.keys(sectionData).length == 0) {
+		for (let [sheetName, sheetData] of Object.entries(json["Data"])) {
+			if (sheetData == null || Object.keys(sheetData).length == 0) {
 				continue;
 			}
 
-			loadRowsAsObjects(section, new Map(Object.entries(sectionData)));
+			loadRowsAsObjectsInSheet(sheetName, new Map(Object.entries(sheetData)));
 		}
 
 		_LoadedPages = makePages(_LoadedRows);
 
-		console.log(_LoadedPages);
-
-		drawTitleRow();
+		renderHeaderRow();
 
 		_CurrentPage = 0;
 		switchPage(0);
-
-		return ImportedData;
 	} catch (err) {
 		console.log(err);
 		return new Map();
 	}
 }
 
-function loadRowsAsObjects(SECTION: string, SECTIONDATA: rowDataType) {
-	SECTIONDATA.forEach((rowData, rowPosition) => {
-		let rowArray = _LoadedRows.get(SECTION);
-		if (rowArray == undefined) {
-			_LoadedRows.set(SECTION, []);
-			rowArray = _LoadedRows.get(SECTION);
-			rowArray?.push(new Row(rowData, rowPosition, SECTION));
+function loadRowsAsObjectsInSheet(sheetName: string, sheetData: rowDataType) {
+	sheetData.forEach((rowData, rowPosition) => {
+		let cachingRowArray = _CachedRows.get(sheetName);
+		let loadedRowArray = _LoadedRows.get(sheetName);
+
+		const rowObject = new Row(rowData, rowPosition, sheetName);
+		const cachedRowObjectTwin = cachingRowArray?.find((obj) => obj.position == rowPosition);
+
+		if (loadedRowArray == undefined) {
+			_LoadedRows.set(sheetName, [rowObject]);
+		} else if (cachedRowObjectTwin != undefined) {
+			loadedRowArray.push(cachedRowObjectTwin);
 		} else {
-			rowArray?.push(new Row(rowData, rowPosition, SECTION));
+			loadedRowArray.push(rowObject);
 		}
 	});
 }
 
-function makeFiltersMap(FILTERS: HTMLElement): filterType {
+function makeFiltersMap(filters: HTMLElement): filterType {
 	let idx: filterType = new Map();
-	const filterElements = FILTERS.children;
+	const filterElements = filters.children;
 
 	for (let i = 0; i < filterElements.length; i++) {
 		const key = filterElements[i].querySelector(".text")?.innerHTML as string;
@@ -158,11 +158,12 @@ function makeFiltersMap(FILTERS: HTMLElement): filterType {
 	return idx;
 }
 
-function drawTitleRow() {
+function renderHeaderRow() {
 	TitleWrapper.innerHTML = `
 	<th scope="col">munkafüzet</th>
 	<th scope="col">oszlop, sor</th>
 	`;
+
 	_Keys.forEach((key: string) => {
 		const el = document.createElement("th");
 		el.innerHTML = key;
@@ -171,14 +172,26 @@ function drawTitleRow() {
 	});
 }
 
-function drawDataInTable(data: Row[], keys: string[]) {
+async function renderDataInTable(data: Row[], keys: string[]) {
+	if (_IsRendering) {
+		while (_IsRendering) {
+			await delay(50);
+		}
+	}
+
+	_IsRendering = true;
 	DataWrapper.innerHTML = ``;
 	data.forEach((rowElement) => {
-		DataWrapper.appendChild(rowElement.getHTMLRowElement(keys));
+		setTimeout(function () {
+			DataWrapper.appendChild(rowElement.getHTMLRowElement(keys));
+		}, 5);
 	});
+	setTimeout(function () {
+		_IsRendering = false;
+	}, 100);
 }
 
-function getSortedRowElements(elements: Row[]): Row[] {
+function getSortedRowObjects(elements: Row[]): Row[] {
 	let returnArray: Row[] = [];
 	let idxArray: number[][] = [];
 	let columns: number[] = [];
@@ -226,7 +239,7 @@ function makePages(data: Map<string, Row[]>): Row[][] {
 	let sortedElementList: Row[] = [];
 
 	data.forEach((sectionData) => {
-		sortedElementList.push(...getSortedRowElements(sectionData));
+		sortedElementList.push(...getSortedRowObjects(sectionData));
 	});
 
 	MaxPages = Math.ceil(sortedElementList.length / MaxRowPerPage);
@@ -246,8 +259,96 @@ function makePages(data: Map<string, Row[]>): Row[][] {
 }
 
 function switchPage(page: number) {
-	drawDataInTable(_LoadedPages[page], _Keys);
+	renderDataInTable(_LoadedPages[page], _Keys);
 	prevPage(true);
 	nextPage(true);
-	PageCounter.innerHTML = `${page + 1}/${MaxPages}`;
+	PageCounter.innerHTML = `${page + 1}/${MaxPages}📃`;
+}
+
+function cacheRow(sheetAndPostion: string, key: string, value: string) {
+	const sheetName = sheetAndPostion.split("; ")[0];
+	const position = sheetAndPostion.split("; ")[1];
+	const rowForCaching: Row = getRowObjectFromPositionInSheet(sheetName, position);
+	const sheetToCacheTo = _CachedRows.get(sheetName) as Row[];
+
+	rowForCaching.setData(key, value);
+
+	let cachingRowArray = _CachedRows.get(sheetName);
+
+	if (cachingRowArray == undefined) {
+		_CachedRows.set(sheetName, [rowForCaching]);
+	} else if (sheetToCacheTo.includes(rowForCaching)) {
+		sheetToCacheTo[sheetToCacheTo.indexOf(rowForCaching)] = rowForCaching;
+	} else {
+		cachingRowArray?.push(getRowObjectFromPositionInSheet(sheetName, position));
+	}
+}
+
+function getRowObjectFromPositionInSheet(sheet: string, position: string): Row {
+	let returnthing: Row = new Row(new Map<string, string>(), "", "");
+	_LoadedRows.forEach((s) => {
+		s.forEach((rowobj) => {
+			if (rowobj.sheet == sheet && rowobj.position == position) {
+				returnthing = rowobj;
+				return;
+			}
+		});
+	});
+	return returnthing;
+}
+
+interface exportableRowDataType {
+	[colrow: string]: { [key: string]: string };
+}
+
+function convertDataIntoExportableObject(data: Map<string, Row[]>): { [section: string]: exportableRowDataType } {
+	let returnData: { [section: string]: exportableRowDataType } = {};
+	data.forEach((objects, section) => {
+		let IdxMap: exportableRowDataType = {};
+		objects.forEach((rowObject) => {
+			IdxMap[rowObject.position] = rowObject.getRowDataAsObject();
+		});
+		returnData[section] = IdxMap;
+	});
+	return returnData;
+}
+
+function resetPage() {
+	_SheetNames = [];
+	_Keys = [];
+	_LoadedRows = new Map<string, Row[]>();
+	_CachedRows = new Map<string, Row[]>();
+	_LoadedPages = [];
+	DataWrapper.innerHTML = "";
+}
+
+async function save() {
+	blurDocument(true);
+	const resp = await fetch("http://localhost:8080/save/", {
+		method: "POST",
+		body: JSON.stringify({ saveData: convertDataIntoExportableObject(_CachedRows) }),
+		headers: {
+			"Content-type": "application/json; charset=UTF-8",
+		},
+	});
+
+	const responseText = await resp.text();
+
+	console.log(responseText);
+
+	blurDocument(false);
+}
+
+async function saveAs() {
+	const resp = await fetch("http://localhost:8080/saveAs/", {
+		method: "POST",
+		body: JSON.stringify({
+			saveData: convertDataIntoExportableObject(_LoadedRows),
+			keys: _Keys,
+			// fileName:
+		}),
+		headers: {
+			"Content-type": "application/json; charset=UTF-8",
+		},
+	});
 }

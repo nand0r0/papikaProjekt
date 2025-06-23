@@ -7,64 +7,25 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
-	"sync"
+	"strconv"
+	"strings"
 
 	"github.com/xuri/excelize/v2"
 )
 
-// [rowcount -> [elementkey -> itemvalue]]
+// ["col, row" -> [elementkey -> itemvalue]]
 type mainDataType map[string]map[string]string
 
 func main() {
-	fmt.Println("Betöltés...")
+	
 
 	fs := http.FileServer(http.Dir("assets"))
 	http.Handle("/assets/", http.StripPrefix("/assets", fs))
-	file, err := excelize.OpenFile("assets/mainmain.xlsx")
-	if err != nil {
-		fmt.Printf("%v Press enter to exit.", err)
-		fmt.Scanln()
-		os.Exit(1)
-	}
 
-	sections := []string{"VKK", "templom", "látnivalók", "VKKBudapest", "MOn kívüli magyar", "elbontott"}
+	SHEETNAMES := []string{"VKK", "templom", "látnivalók", "VKKBudapest", "MOn kívüli magyar", "elbontott"}
 
-	//sectionName -> sectionData
-	SECTIONMAP := make(map[string][][]string)
+	_SheetsDataMap, _KeyMap, _CurrentFile := getFileData("assets/mainmain.xlsx", SHEETNAMES)
 
-	//sectionName -> sectionKeyset
-	KEYMAP := make(map[string][]string)
-	
-	var wg sync.WaitGroup
-
-	for _, Section := range sections {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			rows, err := file.GetRows(Section)
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-			SECTIONMAP[Section] = rows
-
-			for i, row := range rows {	
-				if i > 0 {break}
-				
-				for _, el := range row {
-					if el == "határ" {break}
-					KEYMAP[Section] = append(KEYMAP[Section], el)
-				}
-			}
-		}()
-	}
-	
-	wg.Wait()	
-
-	fmt.Println("Kész!")
-
-	
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		
@@ -73,7 +34,7 @@ func main() {
 	})
 
 	http.HandleFunc("/base/", func(w http.ResponseWriter, r *http.Request) {
-		sendData, err := json.Marshal([][]string{combineAllKeysets(KEYMAP), sections})
+		sendData, err := json.Marshal([][]string{combineAllKeysets(_KeyMap), SHEETNAMES})
 		if err != nil {
 			fmt.Println(err)
 			return
@@ -82,10 +43,84 @@ func main() {
 	})
 
 	http.HandleFunc("/save/", func(w http.ResponseWriter, r *http.Request) {
-		//last task
+		fmt.Println("Mentés folyamatban...")
+		inputBit, err := io.ReadAll(r.Body)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
 
-		x := "hello"
-		w.Write([]byte{x[0], x[1]})
+		var Input map[string]map[string]mainDataType
+		err = json.Unmarshal(inputBit, &Input)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		
+		for sheetName, sheetData := range Input["saveData"] {
+			for rowPosition, rowData := range sheetData {				
+				for keyIndex, key := range _KeyMap[sheetName] {
+					sectionIndex, err := strconv.Atoi(strings.Split(rowPosition, ", ")[0])
+					if err != nil {
+						fmt.Println(err)
+						return
+					}
+					row, err := strconv.Atoi(strings.Split(rowPosition, ", ")[1])
+					if err != nil {
+						fmt.Println(err)
+						return
+					}
+					col := (sectionIndex - 1) * (len(_KeyMap[sheetName]) + 3) + keyIndex
+					
+					selectedCell, err := excelize.CoordinatesToCellName(col + 1, row)
+					fmt.Println(selectedCell)
+					if err != nil {
+						fmt.Println(err)
+						return
+					}
+					err = _CurrentFile.SetCellStr(sheetName, selectedCell, rowData[key])
+					if err != nil {
+						fmt.Println(err)
+						return
+					}					
+				}
+			}
+		}
+		output, err := json.Marshal("done")
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		saveError := _CurrentFile.Save()
+		if saveError != nil {
+			output, err = json.Marshal(saveError)
+			w.Write(output)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			fmt.Println(err)
+			return
+		}
+		w.Write(output)
+		fmt.Println("Mentés kész!")
+
+	})
+
+	http.HandleFunc("/saveAs/", func(w http.ResponseWriter, r *http.Request) {
+
+	})
+
+	http.HandleFunc("/reloadFile/", func(w http.ResponseWriter, r *http.Request) {
+		_CurrentFile.Save()
+		_CurrentFile.Close()
+		_SheetsDataMap, _KeyMap, _CurrentFile = getFileData("assets/mainmain.xlsx", SHEETNAMES)
+		output, err := json.Marshal("done")
+		if err != nil{
+			fmt.Println(err)
+			return
+		}
+		w.Write(output)
 	})
 
 	http.HandleFunc("/search/", func(w http.ResponseWriter, r *http.Request) {
@@ -95,22 +130,22 @@ func main() {
 			return
 		}
 
-		var INPUT map[string]string
-		err = json.Unmarshal(inputBit, &INPUT)
+		var Input map[string]string
+		err = json.Unmarshal(inputBit, &Input)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 
 		var filters map[string]string
-		err = json.Unmarshal([]byte(INPUT["filters"]), &filters)
+		err = json.Unmarshal([]byte(Input["filters"]), &filters)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 
-		var sectionCheckBoxes map[string]bool
-		err = json.Unmarshal([]byte(INPUT["checkedSections"]), &sectionCheckBoxes)
+		var sheetCheckBoxes map[string]bool
+		err = json.Unmarshal([]byte(Input["checkedSheets"]), &sheetCheckBoxes)
 		if err != nil {
 			fmt.Println(err)
 			return
@@ -121,17 +156,16 @@ func main() {
 			Data map[string]mainDataType
 		}
 
-		processedSections := make(map[string]mainDataType) 
-		var selectedSections []string
+		processedSheets := make(map[string]mainDataType) 
+		var selectedSheets []string
 
-		for section, selected := range sectionCheckBoxes {
+		for sheetName, selected := range sheetCheckBoxes {
 			if selected {
-				selectedSections = append(selectedSections, section)
-				processedSections[section] = getDataFromSection(section, SECTIONMAP, KEYMAP[section], INPUT["search"], filters) 
+				selectedSheets = append(selectedSheets, sheetName)
+				processedSheets[sheetName] = getFilteredDataFromSheet(sheetName, _SheetsDataMap, _KeyMap[sheetName], Input["search"], filters) 
 			}
 		}
-
-		OUTPUT, err := json.Marshal(sendType{combineKeysets(selectedSections, KEYMAP), processedSections})
+		OUTPUT, err := json.Marshal(sendType{combineKeysets(selectedSheets, _KeyMap), processedSheets})
 		if err != nil {
 			fmt.Println(err)
 			return

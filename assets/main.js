@@ -2,25 +2,27 @@
 const TitleWrapper = document.getElementById("titles");
 const DataWrapper = document.getElementById("dataWrapper");
 const DialogueFilterWrapper = document.getElementById("listWrapper");
-const SectionsWrapper = document.getElementById("sections");
+const SheetsWrapper = document.getElementById("sections");
 const SearchBox = document.getElementById("searchBox");
 const SearchButton = document.getElementById("searchButton");
 const PageCounter = document.getElementById("pageCounter");
-const SectionCheckBox = document.getElementById("sectionCheckBox");
+const SheetCheckBox = document.getElementById("sectionCheckBox");
+const Savebutton = document.getElementById("save");
 const MaxRowPerPage = 150;
 let MaxPages = 0;
 let _CurrentPage = 0;
-let _Sections;
+let _SheetNames;
 let _Keys;
 let _LoadedRows = new Map();
-let _SavedRows = new Map();
+let _CachedRows = new Map();
 let _LoadedPages;
+let _IsRendering = false;
 fetch("http://localhost:8080/base/")
     .then((resp) => resp.json())
     .then((json) => main(json));
 function main(json) {
     const Filters = json[0];
-    _Sections = json[1];
+    _SheetNames = json[1];
     for (let i = 0; i < Filters.length; i++) {
         const el = document.createElement("tr");
         el.className = "inputForCat";
@@ -30,21 +32,21 @@ function main(json) {
 		`;
         DialogueFilterWrapper?.appendChild(el);
     }
-    for (let i = 0; i < _Sections.length; i++) {
+    for (let i = 0; i < _SheetNames.length; i++) {
         const el = document.createElement("div");
         el.innerHTML = `
-			<input type="checkbox" name="${_Sections[i]}" id="${_Sections[i]}">
-			<label for="${_Sections[i]}">${_Sections[i]}</label><br>
+			<input type="checkbox" name="${_SheetNames[i]}" id="${_SheetNames[i]}">
+			<label for="${_SheetNames[i]}">${_SheetNames[i]}</label><br>
 		`;
-        SectionCheckBox?.appendChild(el);
+        SheetCheckBox?.appendChild(el);
     }
     function getAllSearchParams() {
-        let checkedSections = {};
-        for (let i of SectionCheckBox.children) {
+        let checkedSheets = {};
+        for (let i of SheetCheckBox.children) {
             let checkbox = i.children[0];
-            checkedSections[checkbox.id] = checkbox.checked;
+            checkedSheets[checkbox.id] = checkbox.checked;
         }
-        return [SearchBox.value, checkedSections, makeFiltersMap(DialogueFilterWrapper)];
+        return [SearchBox.value, checkedSheets, makeFiltersMap(DialogueFilterWrapper)];
     }
     SearchBox?.addEventListener("keydown", (keypress) => {
         if (keypress.key == "Enter") {
@@ -62,13 +64,13 @@ function isSmall(name) {
     }
     return "";
 }
-async function search(searchString, tickedSections, filters) {
+async function search(searchString, tickedSheets, filters) {
     try {
         const resp = await fetch("http://localhost:8080/search/", {
             method: "POST",
             body: JSON.stringify({
                 search: searchString,
-                checkedSections: JSON.stringify(tickedSections),
+                checkedSheets: JSON.stringify(tickedSheets),
                 filters: JSON.stringify(Object.fromEntries(filters)),
             }),
             headers: {
@@ -78,42 +80,43 @@ async function search(searchString, tickedSections, filters) {
         _LoadedRows = new Map();
         const responseText = await resp.text();
         const json = JSON.parse(responseText);
-        const ImportedData = new Map(Object.entries(json["Data"]));
         _Keys = json["Keyset"];
-        for (let [section, sectionData] of Object.entries(json["Data"])) {
-            if (sectionData == null || Object.keys(sectionData).length == 0) {
+        for (let [sheetName, sheetData] of Object.entries(json["Data"])) {
+            if (sheetData == null || Object.keys(sheetData).length == 0) {
                 continue;
             }
-            loadRowsAsObjects(section, new Map(Object.entries(sectionData)));
+            loadRowsAsObjectsInSheet(sheetName, new Map(Object.entries(sheetData)));
         }
         _LoadedPages = makePages(_LoadedRows);
-        console.log(_LoadedPages);
-        drawTitleRow();
+        renderHeaderRow();
         _CurrentPage = 0;
         switchPage(0);
-        return ImportedData;
     }
     catch (err) {
         console.log(err);
         return new Map();
     }
 }
-function loadRowsAsObjects(SECTION, SECTIONDATA) {
-    SECTIONDATA.forEach((rowData, rowPosition) => {
-        let rowArray = _LoadedRows.get(SECTION);
-        if (rowArray == undefined) {
-            _LoadedRows.set(SECTION, []);
-            rowArray = _LoadedRows.get(SECTION);
-            rowArray?.push(new Row(rowData, rowPosition, SECTION));
+function loadRowsAsObjectsInSheet(sheetName, sheetData) {
+    sheetData.forEach((rowData, rowPosition) => {
+        let cachingRowArray = _CachedRows.get(sheetName);
+        let loadedRowArray = _LoadedRows.get(sheetName);
+        const rowObject = new Row(rowData, rowPosition, sheetName);
+        const cachedRowObjectTwin = cachingRowArray?.find((obj) => obj.position == rowPosition);
+        if (loadedRowArray == undefined) {
+            _LoadedRows.set(sheetName, [rowObject]);
+        }
+        else if (cachedRowObjectTwin != undefined) {
+            loadedRowArray.push(cachedRowObjectTwin);
         }
         else {
-            rowArray?.push(new Row(rowData, rowPosition, SECTION));
+            loadedRowArray.push(rowObject);
         }
     });
 }
-function makeFiltersMap(FILTERS) {
+function makeFiltersMap(filters) {
     let idx = new Map();
-    const filterElements = FILTERS.children;
+    const filterElements = filters.children;
     for (let i = 0; i < filterElements.length; i++) {
         const key = filterElements[i].querySelector(".text")?.innerHTML;
         const valueEl = filterElements[i].querySelector(".filterClass");
@@ -122,7 +125,7 @@ function makeFiltersMap(FILTERS) {
     }
     return idx;
 }
-function drawTitleRow() {
+function renderHeaderRow() {
     TitleWrapper.innerHTML = `
 	<th scope="col">munkafüzet</th>
 	<th scope="col">oszlop, sor</th>
@@ -134,13 +137,24 @@ function drawTitleRow() {
         TitleWrapper?.appendChild(el);
     });
 }
-function drawDataInTable(data, keys) {
+async function renderDataInTable(data, keys) {
+    if (_IsRendering) {
+        while (_IsRendering) {
+            await delay(50);
+        }
+    }
+    _IsRendering = true;
     DataWrapper.innerHTML = ``;
     data.forEach((rowElement) => {
-        DataWrapper.appendChild(rowElement.getHTMLRowElement(keys));
+        setTimeout(function () {
+            DataWrapper.appendChild(rowElement.getHTMLRowElement(keys));
+        }, 5);
     });
+    setTimeout(function () {
+        _IsRendering = false;
+    }, 100);
 }
-function getSortedRowElements(elements) {
+function getSortedRowObjects(elements) {
     let returnArray = [];
     let idxArray = [];
     let columns = [];
@@ -178,7 +192,7 @@ function makePages(data) {
     let returnData = [];
     let sortedElementList = [];
     data.forEach((sectionData) => {
-        sortedElementList.push(...getSortedRowElements(sectionData));
+        sortedElementList.push(...getSortedRowObjects(sectionData));
     });
     MaxPages = Math.ceil(sortedElementList.length / MaxRowPerPage);
     for (let page = 0; page < MaxPages; page++) {
@@ -194,8 +208,81 @@ function makePages(data) {
     return returnData;
 }
 function switchPage(page) {
-    drawDataInTable(_LoadedPages[page], _Keys);
+    renderDataInTable(_LoadedPages[page], _Keys);
     prevPage(true);
     nextPage(true);
-    PageCounter.innerHTML = `${page + 1}/${MaxPages}`;
+    PageCounter.innerHTML = `${page + 1}/${MaxPages}📃`;
+}
+function cacheRow(sheetAndPostion, key, value) {
+    const sheetName = sheetAndPostion.split("; ")[0];
+    const position = sheetAndPostion.split("; ")[1];
+    const rowForCaching = getRowObjectFromPositionInSheet(sheetName, position);
+    const sheetToCacheTo = _CachedRows.get(sheetName);
+    rowForCaching.setData(key, value);
+    let cachingRowArray = _CachedRows.get(sheetName);
+    if (cachingRowArray == undefined) {
+        _CachedRows.set(sheetName, [rowForCaching]);
+    }
+    else if (sheetToCacheTo.includes(rowForCaching)) {
+        sheetToCacheTo[sheetToCacheTo.indexOf(rowForCaching)] = rowForCaching;
+    }
+    else {
+        cachingRowArray?.push(getRowObjectFromPositionInSheet(sheetName, position));
+    }
+}
+function getRowObjectFromPositionInSheet(sheet, position) {
+    let returnthing = new Row(new Map(), "", "");
+    _LoadedRows.forEach((s) => {
+        s.forEach((rowobj) => {
+            if (rowobj.sheet == sheet && rowobj.position == position) {
+                returnthing = rowobj;
+                return;
+            }
+        });
+    });
+    return returnthing;
+}
+function convertDataIntoExportableObject(data) {
+    let returnData = {};
+    data.forEach((objects, section) => {
+        let IdxMap = {};
+        objects.forEach((rowObject) => {
+            IdxMap[rowObject.position] = rowObject.getRowDataAsObject();
+        });
+        returnData[section] = IdxMap;
+    });
+    return returnData;
+}
+function resetPage() {
+    _SheetNames = [];
+    _Keys = [];
+    _LoadedRows = new Map();
+    _CachedRows = new Map();
+    _LoadedPages = [];
+    DataWrapper.innerHTML = "";
+}
+async function save() {
+    blurDocument(true);
+    const resp = await fetch("http://localhost:8080/save/", {
+        method: "POST",
+        body: JSON.stringify({ saveData: convertDataIntoExportableObject(_CachedRows) }),
+        headers: {
+            "Content-type": "application/json; charset=UTF-8",
+        },
+    });
+    const responseText = await resp.text();
+    console.log(responseText);
+    blurDocument(false);
+}
+async function saveAs() {
+    const resp = await fetch("http://localhost:8080/saveAs/", {
+        method: "POST",
+        body: JSON.stringify({
+            saveData: convertDataIntoExportableObject(_LoadedRows),
+            keys: _Keys,
+        }),
+        headers: {
+            "Content-type": "application/json; charset=UTF-8",
+        },
+    });
 }
