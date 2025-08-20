@@ -23,14 +23,24 @@
 					<thead></thead>
 					<tbody id="listWrapper">
 						<div id="search">
-							<input type="text" placeholder="Keresés" name="search" id="searchBox" />
+							<input type="text" placeholder="keresés" name="search" id="searchBox" />
 							<button class="secondary" id="searchButton">Keresés</button>
 						</div>
-						<br>
+						<hr>
+						<h5>Munkafüzetek kiválasztása</h5>
 						<div id="sectionCheckBox"></div>
-						<br>	
+						<hr>	
+						<h5>Tulajdonság szerinti szűrés</h5>
 					</tbody>
 				</table>
+				<hr>
+				<h5>Koordináta szerinti szűrés</h5>
+				<label for="decimalPoint">Hanyadik tizedes jegyig? (min: 2 max: 8)</label>
+				<input type="number" name="decimalPoint" id="decimalPoint" value="2" min="2" max="8">
+				<label for="latitude">Szélesség</label>
+				<input type="text" name="latitude" id="latitude" value="">
+				<label for="longitude">Hosszúság</label>
+				<input type="text" name="longitude" id="longitude" value="">
 				<footer>
 			</article>
 		</dialog>
@@ -38,7 +48,6 @@
 			<button onclick="reloadFile()" id="reloadFile" style="margin-left: 10px;">Fálj újratöltése</button>
 			<button onclick="save()" id="save" style="margin-left: 10px;">Mentés</button>
 			<button onclick="saveAs()" id="saveAs" style="margin-left: 10px;">Mentés másként</button>
-			<!-- <button style="margin-left: 10px;">Fájl újratöltése</button> -->
 			<button onclick="openModal('searchPromptModal')" style="margin-left: 10px;">Szűrés</button>
 			
 			<div id="selectPage">

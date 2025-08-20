@@ -44,18 +44,11 @@
 		margin-right: 5px;
 	}
 
-	#search {
-		align-items: center;
-		margin: 0px 10px;
-		input {
-			width: 50px !important;
-			margin: 0px !important;
-		}
-	}
-
-	select {
-		width: 300px;
-		margin: 0px 10px;
+	form {
+		display: flex !important;
+		flex-direction: row;
+		border-right: 2px solid white;
+		padding-right: 10px;
 	}
 
 	#selectPage {

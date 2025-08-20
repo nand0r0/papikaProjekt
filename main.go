@@ -13,12 +13,16 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-// ["col, row" -> [elementkey -> itemvalue]]
+// ["col, row" -> [elementkey -> elementvalue]]
 type mainDataType map[string]map[string]string
 
-func main() {
-	
+type coordinateFilterType struct {
+	decimalPoint int
+	latitude float32
+	longitude float32
+}
 
+func main() {
 	fs := http.FileServer(http.Dir("assets"))
 	http.Handle("/assets/", http.StripPrefix("/assets", fs))
 
@@ -137,8 +141,8 @@ func main() {
 			return
 		}
 
-		var filters map[string]string
-		err = json.Unmarshal([]byte(Input["filters"]), &filters)
+		var properyFilters map[string]string
+		err = json.Unmarshal([]byte(Input["propertyFilters"]), &properyFilters)
 		if err != nil {
 			fmt.Println(err)
 			return
@@ -146,6 +150,13 @@ func main() {
 
 		var sheetCheckBoxes map[string]bool
 		err = json.Unmarshal([]byte(Input["checkedSheets"]), &sheetCheckBoxes)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		var coordinateSearchParams map[string]float32
+		err = json.Unmarshal([]byte(Input["coordinateFilter"]), &coordinateSearchParams)
 		if err != nil {
 			fmt.Println(err)
 			return
@@ -162,10 +173,10 @@ func main() {
 		for sheetName, selected := range sheetCheckBoxes {
 			if selected {
 				selectedSheets = append(selectedSheets, sheetName)
-				processedSheets[sheetName] = getFilteredDataFromSheet(sheetName, _SheetsDataMap, _KeyMap[sheetName], Input["search"], filters) 
+				processedSheets[sheetName] = getFilteredDataFromSheet(sheetName, _SheetsDataMap, _KeyMap[sheetName], Input["search"], properyFilters, convertCoordinateFilterToStruct(coordinateSearchParams)) 
 			}
 		}
-		OUTPUT, err := json.Marshal(sendType{combineKeysets(selectedSheets, _KeyMap), processedSheets})
+		OUTPUT, err := json.Marshal(sendType{combineSeletctedKeysets(selectedSheets, _KeyMap), processedSheets})
 		if err != nil {
 			fmt.Println(err)
 			return

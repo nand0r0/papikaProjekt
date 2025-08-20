@@ -8,8 +8,7 @@ const SearchButton = document.getElementById("searchButton");
 const PageCounter = document.getElementById("pageCounter");
 const SheetCheckBox = document.getElementById("sectionCheckBox");
 const Savebutton = document.getElementById("save");
-const MaxRowPerPage = 150;
-let MaxPages = 0;
+const _MAXROWPERPAGE = 80;
 let _CurrentPage = 0;
 let _SheetNames;
 let _Keys;
@@ -17,6 +16,7 @@ let _LoadedRows = new Map();
 let _CachedRows = new Map();
 let _LoadedPages;
 let _IsRendering = false;
+let MaxPages = 0;
 fetch("http://localhost:8080/base/")
     .then((resp) => resp.json())
     .then((json) => main(json));
@@ -46,7 +46,13 @@ function main(json) {
             let checkbox = i.children[0];
             checkedSheets[checkbox.id] = checkbox.checked;
         }
-        return [SearchBox.value, checkedSheets, makeFiltersMap(DialogueFilterWrapper)];
+        const decimalPointCoordInputElement = document.getElementById("decimalPoint");
+        const latitudeInputElement = document.getElementById("latitude");
+        const longitudeInputElement = document.getElementById("longitude");
+        const decimalPoint = parseInt(decimalPointCoordInputElement.value);
+        const latitude = parseFloat(latitudeInputElement.value);
+        const longitude = parseFloat(longitudeInputElement.value);
+        return [SearchBox.value, checkedSheets, makeFiltersMap(DialogueFilterWrapper), { decimalPoint, latitude, longitude }];
     }
     SearchBox?.addEventListener("keydown", (keypress) => {
         if (keypress.key == "Enter") {
@@ -64,14 +70,15 @@ function isSmall(name) {
     }
     return "";
 }
-async function search(searchString, tickedSheets, filters) {
+async function search(searchString, tickedSheets, propertyFilters, coordinateFilter) {
     try {
         const resp = await fetch("http://localhost:8080/search/", {
             method: "POST",
             body: JSON.stringify({
                 search: searchString,
                 checkedSheets: JSON.stringify(tickedSheets),
-                filters: JSON.stringify(Object.fromEntries(filters)),
+                propertyFilters: JSON.stringify(Object.fromEntries(propertyFilters)),
+                coordinateFilter: JSON.stringify(coordinateFilter),
             }),
             headers: {
                 "Content-type": "application/json; charset=UTF-8",
@@ -114,9 +121,9 @@ function loadRowsAsObjectsInSheet(sheetName, sheetData) {
         }
     });
 }
-function makeFiltersMap(filters) {
+function makeFiltersMap(propertyFilters) {
     let idx = new Map();
-    const filterElements = filters.children;
+    const filterElements = propertyFilters.children;
     for (let i = 0; i < filterElements.length; i++) {
         const key = filterElements[i].querySelector(".text")?.innerHTML;
         const valueEl = filterElements[i].querySelector(".filterClass");
@@ -137,7 +144,10 @@ function renderHeaderRow() {
         TitleWrapper?.appendChild(el);
     });
 }
-async function renderDataInTable(data, keys) {
+async function renderRowsInTable(rows, keys) {
+    if (rows == undefined) {
+        return;
+    }
     if (_IsRendering) {
         while (_IsRendering) {
             await delay(50);
@@ -145,7 +155,7 @@ async function renderDataInTable(data, keys) {
     }
     _IsRendering = true;
     DataWrapper.innerHTML = ``;
-    data.forEach((rowElement) => {
+    rows.forEach((rowElement) => {
         setTimeout(function () {
             DataWrapper.appendChild(rowElement.getHTMLRowElement(keys));
         }, 5);
@@ -194,11 +204,11 @@ function makePages(data) {
     data.forEach((sectionData) => {
         sortedElementList.push(...getSortedRowObjects(sectionData));
     });
-    MaxPages = Math.ceil(sortedElementList.length / MaxRowPerPage);
+    MaxPages = Math.ceil(sortedElementList.length / _MAXROWPERPAGE);
     for (let page = 0; page < MaxPages; page++) {
         returnData.push([]);
-        for (let rowIdx = 0; rowIdx < MaxRowPerPage; rowIdx++) {
-            const element = sortedElementList[page * MaxRowPerPage + rowIdx];
+        for (let rowIdx = 0; rowIdx < _MAXROWPERPAGE; rowIdx++) {
+            const element = sortedElementList[page * _MAXROWPERPAGE + rowIdx];
             if (element == undefined) {
                 continue;
             }
@@ -208,7 +218,7 @@ function makePages(data) {
     return returnData;
 }
 function switchPage(page) {
-    renderDataInTable(_LoadedPages[page], _Keys);
+    renderRowsInTable(_LoadedPages[page], _Keys);
     prevPage(true);
     nextPage(true);
     PageCounter.innerHTML = `${page + 1}/${MaxPages}📃`;
@@ -231,16 +241,16 @@ function cacheRow(sheetAndPostion, key, value) {
     }
 }
 function getRowObjectFromPositionInSheet(sheet, position) {
-    let returnthing = new Row(new Map(), "", "");
+    let rowObject = new Row(new Map(), "", "");
     _LoadedRows.forEach((s) => {
         s.forEach((rowobj) => {
             if (rowobj.sheet == sheet && rowobj.position == position) {
-                returnthing = rowobj;
+                rowObject = rowobj;
                 return;
             }
         });
     });
-    return returnthing;
+    return rowObject;
 }
 function convertDataIntoExportableObject(data) {
     let returnData = {};

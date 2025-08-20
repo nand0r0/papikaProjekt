@@ -107,9 +107,9 @@ function nextPage(reset?: boolean) {
 
 function blurDocument(blur: boolean) {
 	if (blur) {
-		document.body.style = "filter: blur(5px)";
+		document.body.style.cssText = "filter: blur(5px)";
 	} else {
-		document.body.style = "";
+		document.body.style.cssText = "";
 	}
 }
 
@@ -126,4 +126,8 @@ async function reloadFile() {
 
 function delay(ms: number) {
 	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isNumber(value?: string | number): boolean {
+	return value != null && value !== " " && !isNaN(Number(value.toString()));
 }

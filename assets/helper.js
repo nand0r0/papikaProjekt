@@ -96,10 +96,10 @@ function nextPage(reset) {
 }
 function blurDocument(blur) {
     if (blur) {
-        document.body.style = "filter: blur(5px)";
+        document.body.style.cssText = "filter: blur(5px)";
     }
     else {
-        document.body.style = "";
+        document.body.style.cssText = "";
     }
 }
 async function reloadFile() {
@@ -114,4 +114,7 @@ async function reloadFile() {
 }
 function delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
+}
+function isNumber(value) {
+    return value != null && value !== " " && !isNaN(Number(value.toString()));
 }

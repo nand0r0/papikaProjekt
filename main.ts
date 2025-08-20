@@ -1,5 +1,5 @@
 //main Typescript file
-type filterType = Map<string, string>;
+type propertyFilterType = Map<string, string>;
 
 //["col, row"][key, value]
 type rowDataType = Map<string, Map<string, string>>;
@@ -14,8 +14,8 @@ const PageCounter = document.getElementById("pageCounter") as HTMLElement;
 const SheetCheckBox = document.getElementById("sectionCheckBox") as HTMLElement;
 const Savebutton = document.getElementById("save") as HTMLButtonElement;
 
-const MaxRowPerPage = 150;
-let MaxPages = 0;
+//150
+const _MAXROWPERPAGE = 80;
 let _CurrentPage = 0;
 
 let _SheetNames: string[];
@@ -25,6 +25,8 @@ let _CachedRows = new Map<string, Row[]>();
 let _LoadedPages: Row[][];
 
 let _IsRendering = false;
+
+let MaxPages = 0;
 
 fetch("http://localhost:8080/base/")
 	.then((resp) => resp.json())
@@ -56,14 +58,22 @@ function main(json: string[][]) {
 		SheetCheckBox?.appendChild(el);
 	}
 
-	function getAllSearchParams(): [string, { [index: string]: boolean }, filterType] {
+	function getAllSearchParams(): [string, { [index: string]: boolean }, propertyFilterType, { decimalPoint: number; latitude: number; longitude: number }] {
 		let checkedSheets: { [index: string]: boolean } = {};
 
 		for (let i of SheetCheckBox.children) {
 			let checkbox = i.children[0] as HTMLInputElement;
 			checkedSheets[checkbox.id] = checkbox.checked;
 		}
-		return [SearchBox.value, checkedSheets, makeFiltersMap(DialogueFilterWrapper)];
+
+		const decimalPointCoordInputElement = document.getElementById("decimalPoint") as HTMLInputElement;
+		const latitudeInputElement = document.getElementById("latitude") as HTMLInputElement;
+		const longitudeInputElement = document.getElementById("longitude") as HTMLInputElement;
+		const decimalPoint = parseInt(decimalPointCoordInputElement.value);
+		const latitude = parseFloat(latitudeInputElement.value);
+		const longitude = parseFloat(longitudeInputElement.value);
+
+		return [SearchBox.value, checkedSheets, makeFiltersMap(DialogueFilterWrapper), { decimalPoint, latitude, longitude }];
 	}
 
 	SearchBox?.addEventListener("keydown", (keypress) => {
@@ -85,14 +95,20 @@ function isSmall(name: string): string {
 	return "";
 }
 
-async function search(searchString: string, tickedSheets: { [index: string]: boolean }, filters: filterType) {
+async function search(
+	searchString: string,
+	tickedSheets: { [index: string]: boolean },
+	propertyFilters: propertyFilterType,
+	coordinateFilter: { decimalPoint: number; latitude: number; longitude: number }
+) {
 	try {
 		const resp = await fetch("http://localhost:8080/search/", {
 			method: "POST",
 			body: JSON.stringify({
 				search: searchString,
 				checkedSheets: JSON.stringify(tickedSheets),
-				filters: JSON.stringify(Object.fromEntries(filters)),
+				propertyFilters: JSON.stringify(Object.fromEntries(propertyFilters)),
+				coordinateFilter: JSON.stringify(coordinateFilter),
 			}),
 			headers: {
 				"Content-type": "application/json; charset=UTF-8",
@@ -145,9 +161,9 @@ function loadRowsAsObjectsInSheet(sheetName: string, sheetData: rowDataType) {
 	});
 }
 
-function makeFiltersMap(filters: HTMLElement): filterType {
-	let idx: filterType = new Map();
-	const filterElements = filters.children;
+function makeFiltersMap(propertyFilters: HTMLElement): propertyFilterType {
+	let idx: propertyFilterType = new Map();
+	const filterElements = propertyFilters.children;
 
 	for (let i = 0; i < filterElements.length; i++) {
 		const key = filterElements[i].querySelector(".text")?.innerHTML as string;
@@ -172,7 +188,11 @@ function renderHeaderRow() {
 	});
 }
 
-async function renderDataInTable(data: Row[], keys: string[]) {
+async function renderRowsInTable(rows: Row[], keys: string[]) {
+	if (rows == undefined) {
+		return;
+	}
+
 	if (_IsRendering) {
 		while (_IsRendering) {
 			await delay(50);
@@ -181,7 +201,8 @@ async function renderDataInTable(data: Row[], keys: string[]) {
 
 	_IsRendering = true;
 	DataWrapper.innerHTML = ``;
-	data.forEach((rowElement) => {
+
+	rows.forEach((rowElement) => {
 		setTimeout(function () {
 			DataWrapper.appendChild(rowElement.getHTMLRowElement(keys));
 		}, 5);
@@ -242,12 +263,12 @@ function makePages(data: Map<string, Row[]>): Row[][] {
 		sortedElementList.push(...getSortedRowObjects(sectionData));
 	});
 
-	MaxPages = Math.ceil(sortedElementList.length / MaxRowPerPage);
+	MaxPages = Math.ceil(sortedElementList.length / _MAXROWPERPAGE);
 
 	for (let page = 0; page < MaxPages; page++) {
 		returnData.push([]);
-		for (let rowIdx = 0; rowIdx < MaxRowPerPage; rowIdx++) {
-			const element = sortedElementList[page * MaxRowPerPage + rowIdx];
+		for (let rowIdx = 0; rowIdx < _MAXROWPERPAGE; rowIdx++) {
+			const element = sortedElementList[page * _MAXROWPERPAGE + rowIdx];
 			if (element == undefined) {
 				continue;
 			}
@@ -259,7 +280,7 @@ function makePages(data: Map<string, Row[]>): Row[][] {
 }
 
 function switchPage(page: number) {
-	renderDataInTable(_LoadedPages[page], _Keys);
+	renderRowsInTable(_LoadedPages[page], _Keys);
 	prevPage(true);
 	nextPage(true);
 	PageCounter.innerHTML = `${page + 1}/${MaxPages}📃`;
@@ -285,16 +306,16 @@ function cacheRow(sheetAndPostion: string, key: string, value: string) {
 }
 
 function getRowObjectFromPositionInSheet(sheet: string, position: string): Row {
-	let returnthing: Row = new Row(new Map<string, string>(), "", "");
+	let rowObject: Row = new Row(new Map<string, string>(), "", "");
 	_LoadedRows.forEach((s) => {
 		s.forEach((rowobj) => {
 			if (rowobj.sheet == sheet && rowobj.position == position) {
-				returnthing = rowobj;
+				rowObject = rowobj;
 				return;
 			}
 		});
 	});
-	return returnthing;
+	return rowObject;
 }
 
 interface exportableRowDataType {
